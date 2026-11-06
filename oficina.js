@@ -107,10 +107,11 @@ window.OFI_INIT = function () {
   NOMES.locais = ['local', 'Novo local de assistência'];
   F.locais = [
     { k: 'entidade', l: 'Cliente que paga (ex.: o torrefator)', t: 'ent', req: 1, full: 1 },
-    { k: 'nome', l: 'Nome do local (ex.: Café Avenida)', t: 'text', req: 1, full: 1 },
-    { k: 'morada', l: 'Morada', t: 'text', full: 1 },
-    { k: 'cp', l: 'Código postal', t: 'text' },
-    { k: 'localidade', l: 'Localidade', t: 'text' },
+    { k: 'nome', l: 'Nome comercial (ex.: Café Avenida)', t: 'text', req: 1, full: 1 },
+    { k: 'morada', l: 'Endereço', t: 'text', req: 1, full: 1 },
+    { k: 'cp', l: 'Código postal (0000-000)', t: 'text', req: 1 },
+    { k: 'localidade', l: 'Cidade / localidade', t: 'text', req: 1 },
+    { k: 'coords', l: 'Coordenadas (ex.: 41.19025, -8.45066) · vazio = calcula pela morada', t: 'text', full: 1 },
     { k: 'contacto', l: 'Pessoa de contacto', t: 'text' },
     { k: 'telefone', l: 'Telefone', t: 'tel' },
     { k: 'notas', l: 'Notas (horário, como chegar…)', t: 'area', full: 1 },
@@ -126,8 +127,11 @@ window.OFI_INIT = function () {
     { k: 'modelo', l: 'Modelo da máquina', t: 'sel', get o() { return modelosL(); } },
     { k: 'grupo', l: 'Grupo / conjunto (filtra as peças)', t: 'sel', get o() { const s = new Set(); D('artigos').forEach(a => isPeca(a) && a.grupoPeca && s.add(a.grupoPeca)); return [...s].sort((a, b) => a.localeCompare(b, 'pt')); } },
     { k: 'nSerie', l: 'N.º de série', t: 'text' },
-    { k: 'localNome', l: 'Assistência fora · local onde está a máquina (ex.: Café Avenida)', t: 'text', full: 1 },
-    { k: 'localMorada', l: 'Morada do local', t: 'text', full: 1 },
+    { k: 'localNome', l: 'Assistência fora · nome comercial do local (ex.: Café Avenida)', t: 'text', full: 1 },
+    { k: 'localMorada', l: 'Endereço do local', t: 'text', full: 1 },
+    { k: 'localCp', l: 'Código postal do local', t: 'text' },
+    { k: 'localCidade', l: 'Cidade do local', t: 'text' },
+    { k: 'localCoords', l: 'Coordenadas do local (opcional: calcula pela morada)', t: 'text' },
     { k: 'localTelefone', l: 'Telefone do local', t: 'tel' },
     { k: 'avaria', l: 'Avaria / o que o cliente pediu', t: 'area', full: 1 },
     { k: 'resp', l: 'Técnico', t: 'user', def: '@me' },
@@ -136,16 +140,37 @@ window.OFI_INIT = function () {
     { k: 'notas', l: 'Notas internas', t: 'area', full: 1 },
   ];
   xdSheet = () => { }; // sem XD na Mundicacau
+  // locais: coordenadas coladas do Google Maps ou calculadas pela morada
+  const parseXY = t => { const m = String(t || '').replace(/[()]/g, ' ').match(/(-?\d{1,2}[.,]\d+)\s*[,; ]\s*(-?\d{1,3}[.,]\d+)/); if (!m) return null; const lat = parseFloat(m[1].replace(',', '.')), lng = parseFloat(m[2].replace(',', '.')); return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null; };
+  async function geocode(q) { try { const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=pt&q=' + encodeURIComponent(q), { headers: { 'Accept-Language': 'pt' } }); const j = await r.json(); if (j[0]) return { lat: +j[0].lat, lng: +j[0].lon }; } catch (_) { } return null; }
+  async function prepLocal(v, antigo) {
+    if ('coords' in v) { const t = String(v.coords || '').trim(); delete v.coords; if (t) { const xy = parseXY(t); if (!xy) { toast('Coordenadas inválidas. Use o formato 41.19025, -8.45066'); return false; } v.lat = xy.lat; v.lng = xy.lng; } }
+    if (v.cp && !/^\d{4}-\d{3}$/.test(String(v.cp).trim())) { const d = String(v.cp).replace(/\D/g, ''); if (d.length === 7) v.cp = d.slice(0, 4) + '-' + d.slice(4); else { toast('Código postal no formato 0000-000'); return false; } }
+    const temXY = v.lat != null || (antigo && antigo.lat);
+    if (!temXY) { const m = v.morada ?? antigo?.morada, cp = v.cp ?? antigo?.cp, lc = v.localidade ?? antigo?.localidade; const xy = (m && await geocode(`${m}, ${cp || ''} ${lc || ''}`)) || ((cp || lc) && await geocode(`${cp || ''} ${lc || ''}`)); if (xy) { v.lat = xy.lat; v.lng = xy.lng; toast('Coordenadas calculadas pela morada'); } }
+    return true;
+  }
+  // ao editar um local, mostra as coordenadas no campo
+  const edit0 = ACT.edit; ACT.edit = (d, b, e) => { if (d.col === 'locais') { const l = S.data.locais.get(d.id); if (l) l.coords = l.lat != null ? `${l.lat}, ${l.lng}` : ''; } return edit0(d, b, e); };
   // depois de criar uma ficha, abre-a (fotos, etiqueta, cronómetro)
   const save0 = save;
   save = async (col, id, vals) => {
+    if (col === 'locais' && vals) {
+      const ok = await prepLocal(vals); if (!ok) return null;
+    }
     if (col === 'fichas' && vals) {
-      const ln = (vals.localNome || '').trim(), lm = (vals.localMorada || '').trim(), lt = (vals.localTelefone || '').trim();
-      delete vals.localNome; delete vals.localMorada; delete vals.localTelefone;
+      const T = k => String(vals[k] || '').trim();
+      const ln = T('localNome'), lv = { morada: T('localMorada'), cp: T('localCp'), localidade: T('localCidade'), coords: T('localCoords'), telefone: T('localTelefone') };
+      ['localNome', 'localMorada', 'localCp', 'localCidade', 'localCoords', 'localTelefone'].forEach(k => delete vals[k]);
       if (ln && vals.entidade) {
         const ja = D('locais').find(x => x.entidade === vals.entidade && norm(x.nome) === norm(ln));
-        const lid = ja ? ja.id : await save0('locais', null, { entidade: vals.entidade, nome: ln, morada: lm || null, telefone: lt || null });
-        if (lid) { vals.local = lid; if (ja && (lm || lt)) await save0('locais', ja.id, { ...(lm ? { morada: lm } : {}), ...(lt ? { telefone: lt } : {}) }); }
+        if (!ja && (!lv.morada || !lv.cp || !lv.localidade)) { toast('Para o local novo faltam o endereço, o código postal ou a cidade.'); return null; }
+        const dados = Object.fromEntries(Object.entries(lv).filter(([, x]) => x));
+        if (!ja) { dados.entidade = vals.entidade; dados.nome = ln; }
+        if (!(await prepLocal(dados, ja))) return null;
+        const lid = ja ? ja.id : await save0('locais', null, dados);
+        if (ja && Object.keys(dados).length) await save0('locais', ja.id, dados);
+        if (lid) vals.local = lid;
         if (!vals.tipo || vals.tipo === 'oficina') vals.tipo = 'local';
       }
     }
@@ -265,7 +290,7 @@ a.btn.pri{color:#fff}
     if (fora(f)) {
       const LS = D('locais').filter(x => x.entidade === f.entidade && x.ativo !== false).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
       h += `<div class="panel" ${L0 ? '' : 'style="border-color:var(--gold)"'}><div class="ph"><h2>Local da assistência</h2><span class="note">onde está a máquina</span></div><div class="pb">
-        ${L0 ? `<p style="margin:0 0 4px"><b>${esc(L0.nome)}</b></p><p class="note" style="margin:0 0 10px">${esc([[L0.morada, L0.cp, L0.localidade].filter(Boolean).join(', '), [L0.contacto, L0.telefone].filter(Boolean).join(' · ')].filter(Boolean).join(' · ') || 'Sem morada')}${L0.notas ? '<br>' + esc(L0.notas) : ''}</p>
+        ${L0 ? `<p style="margin:0 0 4px"><b>${esc(L0.nome)}</b></p><p class="note" style="margin:0 0 10px">${esc([[L0.morada, L0.cp, L0.localidade].filter(Boolean).join(', '), [L0.contacto, L0.telefone].filter(Boolean).join(' · ')].filter(Boolean).join(' · ') || 'Sem morada')}${L0.lat != null ? `<br>Coordenadas ${(+L0.lat).toFixed(5)}, ${(+L0.lng).toFixed(5)}` : '<br><span style="color:var(--bad)">Sem coordenadas: ficam ao carregar em «Estou aqui»</span>'}${L0.notas ? '<br>' + esc(L0.notas) : ''}</p>
           <div class="of-row2" style="margin-bottom:12px">${L0.telefone ? `<a class="btn sm" href="tel:${esc(telClean(L0.telefone))}">${ic('phone', 16)}Ligar para o local</a>` : ''}<a class="btn sm" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}" target="_blank" rel="noopener">${ic('pin', 16)}Ir até lá</a>${ro ? '' : `<button class="btn sm" data-act="edit" data-col="locais" data-id="${L0.id}">${ic('edit', 16)}Editar local</button>`}</div>`
         : `<p class="note" style="margin:0 0 10px">A assistência é no cliente do cliente? Escolha o local (ex.: o café onde está a máquina). Se for na morada de ${esc(e.nome || 'cliente')}, deixe em branco.</p>`}
         ${ro ? '' : `<div class="of-row2"><div class="fld" style="flex:1;min-width:200px;margin:0"><label for="oflocal">Local</label><select id="oflocal" data-oflocal="${f.id}"><option value="">Na morada de ${esc(e.nome || 'cliente')}</option>${LS.map(x => `<option value="${x.id}" ${x.id === f.local ? 'selected' : ''}>${esc(x.nome)}${x.localidade ? ' · ' + esc(x.localidade) : ''}</option>`).join('')}</select></div><button class="btn" style="align-self:flex-end" data-act="ofiLocalNovo" data-id="${f.id}">${ic('plus', 16)}Novo local</button></div>`}

@@ -36,7 +36,7 @@ Antes de **cada** chamada a uma ferramenta Supabase, confirma que `project_id` �
 
 ## Como publicar alterações no site de testes
 
-1. Editar os ficheiros (index.html, maquinas.js, extrato.js, pedido.html, sw.js, config.js, manifest.webmanifest).
+1. Editar os ficheiros (index.html, oficina.js, maquinas.js, extrato.js, pedido.html, sw.js, config.js, manifest.webmanifest, logo.png, ícones).
 2. Aumentar a versão em `sw.js` (`crm-vending-teste-v1` → `v2` …), senão os telemóveis ficam com a versão antiga.
 3. Enviar pelo GitHub em https://github.com/coronelcafefafe/crm-vending-teste/upload/main e confirmar o commit.
 4. `config.js` tem de apontar sempre para `https://rwsoizhxhqbchtjbgvip.supabase.co`.
@@ -47,3 +47,10 @@ Antes de **cada** chamada a uma ferramenta Supabase, confirma que `project_id` �
 - Apagar dados de forma permanente só com a aprovação do André.
 - Os funcionários (ex.: técnico) não veem custos nem valores da empresa.
 - A faixa laranja "VERSÃO DE TESTES" no fundo do ecrã fica até o André dizer o contrário.
+
+## Adaptação Mundicacau (06/11/2026)
+
+- Os dados reais da Coronel Café foram apagados da base de testes. Ficaram só as 1893 peças (sem preços de custo); clientes, máquinas e fichas são fictícios (`exemplo = true`).
+- Marca Mundicacau: `logo.png`, ícones, azul claro `#0090E0` e azul escuro `#2F4F94`.
+- Módulo novo `oficina.js`: fichas de assistência (tabelas `fichas` e `fichas_tempos`), preços por cliente (`entidades.preco_hora`, `desl_modo`, `preco_km`, `desl_tabela`), tabelas de escalões (`desl_tabelas`), configuração (`oficina_config`, morada base 41.19025, -8.45067), modelos (`modelos`). As peças filtram-se por `artigos.modelos` e `artigos.grupo_peca`. Fotos no bucket `fichas`.
+- Especificação completa no documento do projeto "Mundicacau - especificacao do CRM".

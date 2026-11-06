@@ -1,4 +1,4 @@
-/* Coronel CRM · Máquinas (vending e café)
+/* Mundicacau CRM · Máquinas (vending e café)
    Abastecimento por QR, assistências com peças e tempo, mudanças de local, faturação e rentabilidade por máquina,
    e stock do armazém. Controlo interno: nada disto vai para o XD. */
 window.MAQ_INIT = function () {
@@ -729,7 +729,7 @@ window.MAQ_INIT = function () {
     const svg = n => { const q = qrcode(0, 'M'); q.addData(QR_URL(n)); q.make(); return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); };
     const limpa = n => String(n).replace(/[<>&]/g, '');
     if (fmt === 'a6') {
-      w.document.write(`<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><title>Etiquetas QR A6 · Coronel Café</title>
+      w.document.write(`<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><title>Etiquetas QR A6 · Mundicacau</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&family=Hanken+Grotesk:wght@400;500&display=swap" rel="stylesheet">
 <style>@page{size:105mm 148mm;margin:0}*{box-sizing:border-box}body{margin:0;font-family:'Hanken Grotesk',Arial,sans-serif;color:#1D1D1F;background:#fff}
 .e{width:105mm;height:148mm;padding:8mm 8mm 7mm;display:flex;flex-direction:column;align-items:center;justify-content:space-between;text-align:center;break-after:page;page-break-after:always;overflow:hidden}
@@ -739,16 +739,16 @@ window.MAQ_INIT = function () {
 .n{font-family:'Cormorant Garamond',serif;font-size:96pt;line-height:.9;margin:0}
 .e svg{width:66mm;height:66mm;display:block}.t{font-size:9pt;color:#6E6E73;line-height:1.35}
 .p{text-align:center;margin:6mm 0;font-size:10pt}@media print{.p{display:none}}@media screen{body{background:#F2F2F4}.e{background:#fff;margin:6mm auto;border:1px solid #E5E5EA}}</style></head><body>
-<div class="p"><button onclick="print()">Imprimir</button> · imprima em tamanho A6, sem ajustar à página</div>${nums.map(n => `<div class="e"><div><div class="b">Coronel Café</div><div class="r"></div></div><div><div class="l">Máquina</div><div class="n">${limpa(n)}</div></div>${svg(n)}<div class="t">Leia o código para abastecer<br>ou pedir assistência · 919 982 150</div></div>`).join('')}</body></html>`);
+<div class="p"><button onclick="print()">Imprimir</button> · imprima em tamanho A6, sem ajustar à página</div>${nums.map(n => `<div class="e"><div><div class="b">Mundicacau</div><div class="r"></div></div><div><div class="l">Máquina</div><div class="n">${limpa(n)}</div></div>${svg(n)}<div class="t">Leia o código para abastecer<br>ou pedir assistência · 919 982 150</div></div>`).join('')}</body></html>`);
       w.document.close(); return;
     }
-    w.document.write(`<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><title>Etiquetas QR · Coronel Café</title>
+    w.document.write(`<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><title>Etiquetas QR · Mundicacau</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&family=Hanken+Grotesk:wght@400;500&display=swap" rel="stylesheet">
 <style>@page{size:A4;margin:10mm}body{margin:0;font-family:'Hanken Grotesk',Arial,sans-serif;color:#1D1D1F}
 .g{display:grid;grid-template-columns:repeat(3,1fr);gap:6mm}.e{border:1px solid #E5E5EA;border-radius:3mm;padding:5mm;text-align:center;break-inside:avoid}
 .e svg{width:38mm;height:38mm}.n{font-family:'Cormorant Garamond',serif;font-size:30pt;line-height:1;margin:2mm 0 1mm}.b{font-size:8pt;color:#6E6E73;letter-spacing:.08em;text-transform:uppercase}
 .r{height:.3mm;background:#C4A052;width:16mm;margin:2mm auto}.t{font-size:8pt;color:#6E6E73}.p{text-align:center;margin:6mm 0;font-size:10pt}@media print{.p{display:none}}</style></head><body>
-<div class="p"><button onclick="print()">Imprimir</button></div><div class="g">${nums.map(n => `<div class="e">${svg(n)}<div class="n">${String(n).replace(/[<>&]/g, '')}</div><div class="r"></div><div class="b">Coronel Café</div><div class="t">Leia para abastecer ou pedir assistência</div></div>`).join('')}</div></body></html>`);
+<div class="p"><button onclick="print()">Imprimir</button></div><div class="g">${nums.map(n => `<div class="e">${svg(n)}<div class="n">${String(n).replace(/[<>&]/g, '')}</div><div class="r"></div><div class="b">Mundicacau</div><div class="t">Leia para abastecer ou pedir assistência</div></div>`).join('')}</div></body></html>`);
     w.document.close();
   };
 

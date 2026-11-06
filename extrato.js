@@ -1,9 +1,9 @@
-/* Coronel CRM · Extrato de pendentes (PDF)
+/* Mundicacau CRM · Extrato de pendentes (PDF)
    Gera no telemóvel um PDF com os documentos por pagar do XD e deixa partilhar (WhatsApp, email…),
-   descarregar ou enviar por email a partir de geral@coronelcafe.com. Não é um documento fiscal. */
+   descarregar ou enviar por email a partir de oficina@mundicacau.exemplo. Não é um documento fiscal. */
 window.EXT_INIT = function () {
-  const EMPRESA = 'LPAM Unipessoal Lda · Urb. Capitão Salgueiro Maia, 69/70, 4820-260 Fafe';
-  const CONTACTO = '919 982 150 · geral@coronelcafe.com · coronelcafe.com';
+  const EMPRESA = 'Mundicacau';
+  const CONTACTO = 'oficina@mundicacau.exemplo · mundicacau.pt';
   const TIPO = { FT: 'Fatura', FR: 'Fatura-recibo', FS: 'Fatura simplificada', ND: 'Nota de débito', NC: 'Nota de crédito' };
   const dPT = s => s ? String(s).slice(0, 10).split('-').reverse().join('/') : '';
   const emailOk = s => String(s || '').split(/[;,\s]+/).find(v => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) || '';
@@ -98,7 +98,7 @@ window.EXT_INIT = function () {
           <button class="btn ${podePart ? '' : 'pri'}" data-act="extEmail" data-id="${d.id}" style="justify-content:center;min-height:48px" ${em && CFG.emailEncomendas ? '' : 'disabled'}>Enviar por email${em ? ' para ' + esc(em) : ''}</button>
           <button class="btn" data-act="extDesc" style="justify-content:center;min-height:48px">Descarregar PDF</button>
         </div>
-        ${em ? '<p class="note" style="margin:12px 0 0">O email sai de geral@coronelcafe.com, com cópia para geral@.</p>' : '<p class="note" style="margin:12px 0 0">Este cliente não tem email na ficha. Use Partilhar ou acrescente o email na ficha.</p>'}
+        ${em ? '<p class="note" style="margin:12px 0 0">O email sai de oficina@mundicacau.exemplo, com cópia para geral@.</p>' : '<p class="note" style="margin:12px 0 0">Este cliente não tem email na ficha. Use Partilhar ou acrescente o email na ficha.</p>'}
       </div>`);
     },
     extPart: async () => {

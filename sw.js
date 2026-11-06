@@ -1,6 +1,6 @@
-// Coronel CRM · service worker: guarda a app para abrir depressa; os dados vêm sempre do Supabase.
-const CACHE = "crm-vending-teste-v1";
-const SHELL = ["./", "index.html", "config.js", "maquinas.js", "extrato.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
+// Mundicacau CRM · service worker: guarda a app para abrir depressa; os dados vêm sempre do Supabase.
+const CACHE = "crm-vending-teste-v2";
+const SHELL = ["./", "index.html", "config.js", "maquinas.js", "oficina.js", "logo.png", "extrato.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -4,7 +4,7 @@
    orçamento opcional, avisos ao cliente (email e WhatsApp), agrupamento de trabalhos iguais,
    rota do dia (do mais longe para o mais perto) e exportação para faturar. */
 window.OFI_INIT = function () {
-  const NOVAS = ['locais', 'fichas', 'fichas_tempos', 'modelos', 'desl_tabelas', 'oficina_config'];
+  const NOVAS = ['croquis', 'locais', 'fichas', 'fichas_tempos', 'modelos', 'desl_tabelas', 'oficina_config'];
   NOVAS.forEach(c => { if (!COLS.includes(c)) COLS.push(c); S.data[c] = new Map(); });
 
   const EST = { recebido: 'Recebido', diagnostico: 'Em diagnóstico', orcamento: 'Orçamento enviado', aguarda_peca: 'À espera de peça', reparacao: 'Em reparação', pronto: 'Pronto', entregue: 'Entregue', cancelado: 'Cancelado' };
@@ -120,6 +120,9 @@ window.OFI_INIT = function () {
     { k: 'modelo', l: 'Modelo da máquina', t: 'sel', get o() { return modelosL(); } },
     { k: 'grupo', l: 'Grupo / conjunto (filtra as peças)', t: 'sel', get o() { const s = new Set(); D('artigos').forEach(a => isPeca(a) && a.grupoPeca && s.add(a.grupoPeca)); return [...s].sort((a, b) => a.localeCompare(b, 'pt')); } },
     { k: 'nSerie', l: 'N.º de série', t: 'text' },
+    { k: 'localNome', l: 'Assistência fora · local onde está a máquina (ex.: Café Avenida)', t: 'text', full: 1 },
+    { k: 'localMorada', l: 'Morada do local', t: 'text', full: 1 },
+    { k: 'localTelefone', l: 'Telefone do local', t: 'tel' },
     { k: 'avaria', l: 'Avaria / o que o cliente pediu', t: 'area', full: 1 },
     { k: 'resp', l: 'Técnico', t: 'user', def: '@me' },
     { k: 'prevista', l: 'Data prevista / agendada', t: 'date' },
@@ -129,7 +132,18 @@ window.OFI_INIT = function () {
   xdSheet = () => { }; // sem XD na Mundicacau
   // depois de criar uma ficha, abre-a (fotos, etiqueta, cronómetro)
   const save0 = save;
-  save = async (col, id, vals) => { const r = await save0(col, id, vals); if (r && col === 'fichas' && !id) setTimeout(() => go('ofi', { id: r }), 60); if (r && col === 'locais' && !id && S.ofLocalPara) { const fid = S.ofLocalPara; S.ofLocalPara = null; await save0('fichas', fid, { local: r }); } return r; };
+  save = async (col, id, vals) => {
+    if (col === 'fichas' && vals) {
+      const ln = (vals.localNome || '').trim(), lm = (vals.localMorada || '').trim(), lt = (vals.localTelefone || '').trim();
+      delete vals.localNome; delete vals.localMorada; delete vals.localTelefone;
+      if (ln && vals.entidade) {
+        const ja = D('locais').find(x => x.entidade === vals.entidade && norm(x.nome) === norm(ln));
+        const lid = ja ? ja.id : await save0('locais', null, { entidade: vals.entidade, nome: ln, morada: lm || null, telefone: lt || null });
+        if (lid) { vals.local = lid; if (ja && (lm || lt)) await save0('locais', ja.id, { ...(lm ? { morada: lm } : {}), ...(lt ? { telefone: lt } : {}) }); }
+        if (!vals.tipo || vals.tipo === 'oficina') vals.tipo = 'local';
+      }
+    }
+    const r = await save0(col, id, vals); if (r && col === 'fichas' && !id) setTimeout(() => go('ofi', { id: r }), 60); if (r && col === 'locais' && !id && S.ofLocalPara) { const fid = S.ofLocalPara; S.ofLocalPara = null; await save0('fichas', fid, { local: r }); } return r; };
 
   /* ---------- estilos ---------- */
   const st = document.createElement('style');
@@ -156,6 +170,11 @@ window.OFI_INIT = function () {
 .of-sum td{padding:8px 0}
 [data-act="xdPed"]{display:none!important}
 a.btn.pri{color:#fff}
+.of-cq{position:relative;margin-top:10px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.of-cq img{display:block;width:100%;height:auto}
+.of-pt{position:absolute;transform:translate(-50%,-50%);min-width:26px;height:26px;padding:0 5px;border-radius:13px;border:2px solid var(--brand);background:rgba(255,255,255,.92);color:var(--brand);font-size:12px;font-weight:700;display:grid;place-items:center}
+.of-pt.on{background:var(--brand);color:#fff}
+.of-pt i{position:absolute;top:-9px;right:-9px;min-width:18px;height:18px;border-radius:9px;background:var(--ok,#1a7f4b);color:#fff;font-style:normal;font-size:11px;display:grid;place-items:center;padding:0 3px}
 .of-stop{background:var(--bad)!important;border-color:var(--bad)!important;color:#fff!important}
 `;
   document.head.appendChild(st);
@@ -279,7 +298,9 @@ a.btn.pri{color:#fff}
     const P0 = f.pecas || [];
     h += `<div class="panel"><div class="ph"><h2>Peças aplicadas</h2>${S.verValores && v.pc ? `<b class="num">${eur(v.pc)}</b>` : ''}</div><div class="pb">
       ${P0.length ? P0.map((p, i) => `<div class="of-pc"><span class="grow">${esc(p.nome)}<small>${esc(p.ref || '')}${S.verValores ? ' · ' + eur(p.preco) + '/un' : ''}</small></span>${ro ? `<b>${p.qt}</b>` : `<span class="of-qt"><button data-act="ofiPq" data-id="${f.id}" data-i="${i}" data-c="-1">−</button><b class="num">${String(p.qt).replace('.', ',')}</b><button data-act="ofiPq" data-id="${f.id}" data-i="${i}" data-c="1">+</button></span>`}</div>`).join('') : '<p class="note" style="margin:0">Ainda sem peças.</p>'}
-      ${ro ? '' : !S.ofPick?.open ? `<div style="margin-top:12px"><button class="btn" data-act="ofiPick" data-id="${f.id}">${ic('plus', 16)}Adicionar peça${f.modelo ? ' do ' + esc(f.modelo) : ''}</button></div>` : `
+      ${ro ? '' : `<div class="of-row2" style="margin-top:12px;align-items:flex-end"><div class="fld" style="flex:1;min-width:160px;margin:0"><label for="ofcod">Código da peça</label><input id="ofcod" data-ofcod="${f.id}" placeholder="Ex.: 0V2277" autocomplete="off" autocapitalize="characters" enterkeyhint="done"></div><div class="fld" style="width:76px;margin:0"><label for="ofcodqt">Qt</label><input id="ofcodqt" type="number" min="1" step="1" value="1" inputmode="numeric"></div><button class="btn pri" data-act="ofiCod" data-id="${f.id}">Pôr</button></div>`}
+      ${(() => { const CQ = D('croquis').filter(c => f.modelo && norm(c.modelo) === norm(f.modelo)).sort((a, b) => (a.ordem ?? 999) - (b.ordem ?? 999) || a.grupo.localeCompare(b.grupo, 'pt')); return CQ.length ? `<div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:8px">Croquis do ${esc(f.modelo)} · toque num número</div><div class="of-est">${CQ.map(c => `<button class="chipb ${S.ofCroqui === c.id ? 'on' : ''}" data-act="ofiCroqui" data-c="${c.id}">${esc(c.grupo)}</button>`).join('')}</div>${S.ofCroqui && CQ.some(c => c.id === S.ofCroqui) ? croquiH(f, S.data.croquis.get(S.ofCroqui)) : ''}</div>` : (f.modelo ? `<p class="note" style="margin:12px 0 0">Ainda não há croquis do ${esc(f.modelo)}.</p>` : ''); })()}
+      ${ro ? '' : !S.ofPick?.open ? `<div style="margin-top:12px"><button class="btn" data-act="ofiPick" data-id="${f.id}">${ic('search', 16)}Procurar peça${f.modelo ? ' do ' + esc(f.modelo) : ''}</button></div>` : `
         <div class="fg" style="margin-top:12px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
           <div class="fld"><label for="ofpm">Modelo</label><select id="ofpm" data-ofp="mod"><option value="">Todos os modelos</option>${modelosL().map(m => `<option ${m === mod ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div>
           <div class="fld"><label for="ofpg">Grupo</label><select id="ofpg" data-ofp="grp"><option value="">Todos os grupos</option>${gruposDe(mod).map(g => `<option ${g === grp ? 'selected' : ''}>${esc(g)}</option>`).join('')}${grp && !gruposDe(mod).includes(grp) ? `<option selected>${esc(grp)}</option>` : ''}</select></div>
@@ -414,12 +435,47 @@ a.btn.pri{color:#fff}
   };
 
   // peças
-  ACT.ofiPick = d => { const f = fx(d.id); S.ofPick = { id: d.id, open: true, mod: f?.modelo || '', grp: f?.grupo || '', q: '' }; render(); setTimeout(() => $('#ofpq')?.focus(), 50); };
+  ACT.ofiPick = d => { const f = fx(d.id); S.ofPick = { id: d.id, open: true, mod: f?.modelo || '', grp: '', q: '' }; render(); setTimeout(() => $('#ofpq')?.focus(), 50); };
   ACT.ofiPickX = () => { S.ofPick = null; render(); };
-  ACT.ofiPadd = async d => {
-    const f = fx(d.id), a = S.data.artigos.get(d.a); if (!f || !a) return; const L = clone(f.pecas || []);
-    const x = L.find(p => p.artigo === a.id); if (x) x.qt = (+x.qt || 0) + 1; else L.push({ artigo: a.id, nome: a.nome, ref: a.ref || '', qt: 1, preco: +a.preco || 0 });
-    if (await patch('fichas', f.id, { pecas: L })) toast('Peça adicionada');
+  async function poePeca(f, a, qt = 1, ref) {
+    const L = clone(f.pecas || []);
+    const x = a ? L.find(p => p.artigo === a.id) : L.find(p => !p.artigo && norm(p.ref) === norm(ref));
+    if (x) x.qt = (+x.qt || 0) + qt; else L.push(a ? { artigo: a.id, nome: a.nome, ref: a.ref || '', qt, preco: +a.preco || 0 } : { artigo: null, nome: 'Peça ' + ref + ' (fora do catálogo)', ref, qt, preco: 0 });
+    if (await patch('fichas', f.id, { pecas: L })) toast(`${qt} × ${a ? a.nome : ref}`);
+  }
+  const nref = r => String(r || '').replace(/[\s.\-]/g, '').toUpperCase();
+  const porRef = ref => { const q = nref(ref); return D('artigos').find(a => a.ref && nref(a.ref) === q); };
+  ACT.ofiPadd = async d => { const f = fx(d.id), a = S.data.artigos.get(d.a); if (f && a) await poePeca(f, a, 1); };
+  ACT.ofiCod = async d => {
+    const f = fx(d.id), inp = $('#ofcod'), ref = (inp?.value || '').trim(), qt = Math.max(1, parseInt($('#ofcodqt')?.value, 10) || 1); if (!f || !ref) return inp?.focus();
+    const a = porRef(ref);
+    if (!a) { if (!confirm(`O código ${ref} não está no catálogo. Pôr na ficha mesmo assim (sem preço)?`)) return; }
+    else if (f.modelo && a.modelos && !servePara(a, f.modelo) && !confirm(`${a.nome} (${a.ref}) não aparece no catálogo do ${f.modelo}. Pôr mesmo assim?`)) return;
+    await poePeca(f, a, qt, ref); const i2 = $('#ofcod'); if (i2) { i2.value = ''; i2.focus(); } const q2 = $('#ofcodqt'); if (q2) q2.value = 1;
+  };
+  document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target?.dataset?.ofcod) { e.preventDefault(); ACT.ofiCod({ id: e.target.dataset.ofcod }); } });
+
+  // croqui: desenho do manual com os números clicáveis
+  const croquiUrl = p => /^https?:/.test(p) ? p : S.db.storage.from('croquis').getPublicUrl(p).data.publicUrl;
+  function croquiH(f, c) {
+    if (!c) return '';
+    const qtd = ref => { const a = porRef(ref); return (f.pecas || []).filter(p => (a && p.artigo === a.id) || nref(p.ref) === nref(ref)).reduce((s, p) => s + (+p.qt || 0), 0); };
+    return `<div class="of-cq"><img src="${esc(croquiUrl(c.imagem))}" alt="Croqui ${esc(c.grupo)}" loading="lazy">${(c.pontos || []).map(p => { const n = qtd(p.ref); return `<button class="of-pt ${n ? 'on' : ''}" style="left:${+p.x}%;top:${+p.y}%" data-act="ofiPos" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" title="${esc(p.ref)}">${esc(p.pos)}${n ? `<i>${n}</i>` : ''}</button>`; }).join('')}</div>
+      <table class="tt" style="margin-top:8px"><tbody>${(c.pontos || []).map(p => { const a = porRef(p.ref), n = qtd(p.ref); return `<tr data-act="ofiPos" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" style="cursor:pointer"><td style="width:42px"><b>${esc(p.pos)}</b></td><td>${esc(a?.nome || p.nome || '')}<br><small style="color:var(--ink-3)">${esc(p.ref)}</small></td><td class="num">${n ? badge(n + ' na ficha', 'ok') : ''}</td></tr>`; }).join('')}</tbody></table>`;
+  }
+  ACT.ofiCroqui = d => { S.ofCroqui = S.ofCroqui === d.c ? null : d.c; render(); };
+  ACT.ofiPos = d => {
+    const f = fx(d.id), c = S.data.croquis.get(d.c); if (!f || !c) return; const p = (c.pontos || []).find(x => String(x.pos) === String(d.p)); if (!p) return;
+    const a = porRef(p.ref), n = (f.pecas || []).filter(x => (a && x.artigo === a.id) || nref(x.ref) === nref(p.ref)).reduce((s, x) => s + (+x.qt || 0), 0);
+    openSheet(`<div class="sh"><h2>N.º ${esc(p.pos)} · ${esc(c.grupo)}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
+      <p style="margin:0 0 4px;font-size:17px"><b>${esc(a?.nome || p.nome || 'Peça')}</b></p><p class="note" style="margin:0 0 14px">Código ${esc(p.ref)}${S.verValores && a?.preco != null ? ' · ' + eur(a.preco) : ''}${a ? '' : ' · não está no catálogo'}</p>
+      <div class="of-row2"><span style="flex:1">Nesta assistência: <b>${n}</b></span>${S.canWrite ? `<button class="btn" data-act="ofiPosQ" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" data-q="-1" ${n ? '' : 'disabled'}>− 1</button><button class="btn pri" data-act="ofiPosQ" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" data-q="1">+ 1</button>` : ''}</div></div>`);
+  };
+  ACT.ofiPosQ = async d => {
+    const f = fx(d.id), c = S.data.croquis.get(d.c); if (!f || !c) return; const p = (c.pontos || []).find(x => String(x.pos) === String(d.p)); const a = porRef(p.ref);
+    if (+d.q > 0) await poePeca(f, a, 1, p.ref);
+    else { const L = clone(f.pecas || []), i = L.findIndex(x => (a && x.artigo === a.id) || nref(x.ref) === nref(p.ref)); if (i >= 0) { L[i].qt = (+L[i].qt || 0) - 1; if (L[i].qt <= 0) L.splice(i, 1); await patch('fichas', f.id, { pecas: L }); } }
+    ACT.ofiPos(d);
   };
   ACT.ofiPq = async d => { const f = fx(d.id); if (!f) return; const L = clone(f.pecas || []), i = +d.i; if (!L[i]) return; L[i].qt = (+L[i].qt || 0) + (+d.c); if (L[i].qt <= 0) L.splice(i, 1); await patch('fichas', f.id, { pecas: L }); };
 

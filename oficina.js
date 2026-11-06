@@ -4,7 +4,7 @@
    orçamento opcional, avisos ao cliente (email e WhatsApp), agrupamento de trabalhos iguais,
    rota do dia (do mais longe para o mais perto) e exportação para faturar. */
 window.OFI_INIT = function () {
-  const NOVAS = ['fichas', 'fichas_tempos', 'modelos', 'desl_tabelas', 'oficina_config'];
+  const NOVAS = ['locais', 'fichas', 'fichas_tempos', 'modelos', 'desl_tabelas', 'oficina_config'];
   NOVAS.forEach(c => { if (!COLS.includes(c)) COLS.push(c); S.data[c] = new Map(); });
 
   const EST = { recebido: 'Recebido', diagnostico: 'Em diagnóstico', orcamento: 'Orçamento enviado', aguarda_peca: 'À espera de peça', reparacao: 'Em reparação', pronto: 'Pronto', entregue: 'Entregue', cancelado: 'Cancelado' };
@@ -16,6 +16,9 @@ window.OFI_INIT = function () {
   const fora = f => f.tipo !== 'oficina';
   const cfg = () => S.data.oficina_config.get(1) || { empresa: 'Mundicacau', precoHora: 30, precoKm: 0.4, idaVolta: true, baseLat: 41.19025117241961, baseLng: -8.450665245494452 };
   const prop = f => f.proprietario || entName(f.entidade);
+  const loc = f => f.local ? S.data.locais.get(f.local) : null;
+  const ondeXY = f => { const l = loc(f); if (l && l.lat && l.lng) return { lat: l.lat, lng: l.lng }; const e = ent(f.entidade); return e && e.lat && e.lng ? { lat: e.lat, lng: e.lng } : null; };
+  const ondeTxt = f => { const l = loc(f); return l ? [l.nome, [l.morada, l.cp, l.localidade].filter(Boolean).join(', ')].filter(Boolean).join(' · ') : ''; };
   const cod = f => f.codigo || ('MC-' + String(f.numero || '').padStart(4, '0'));
   const nomeEq = f => [f.equipamento, f.modelo ? ((f.marca ? f.marca + ' ' : '') + f.modelo) : ''].filter(Boolean).join(' · ');
   const fmtMin = m => { m = Math.round(m || 0); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min'; };
@@ -95,6 +98,17 @@ window.OFI_INIT = function () {
     { k: 'deslTabela', l: 'Tabela de escalões (se for por escalões)', t: 'sel', get o() { return Object.fromEntries(D('desl_tabelas').map(t => [t.id, t.nome])); }, so: 1 },
   );
 
+  NOMES.locais = ['local', 'Novo local de assistência'];
+  F.locais = [
+    { k: 'entidade', l: 'Cliente que paga (ex.: o torrefator)', t: 'ent', req: 1, full: 1 },
+    { k: 'nome', l: 'Nome do local (ex.: Café Avenida)', t: 'text', req: 1, full: 1 },
+    { k: 'morada', l: 'Morada', t: 'text', full: 1 },
+    { k: 'cp', l: 'Código postal', t: 'text' },
+    { k: 'localidade', l: 'Localidade', t: 'text' },
+    { k: 'contacto', l: 'Pessoa de contacto', t: 'text' },
+    { k: 'telefone', l: 'Telefone', t: 'tel' },
+    { k: 'notas', l: 'Notas (horário, como chegar…)', t: 'area', full: 1 },
+  ];
   NOMES.fichas = ['ficha', 'Nova ficha de assistência'];
   F.fichas = [
     { k: 'tipo', l: 'Tipo de trabalho', t: 'sel', o: TIPO, req: 1, def: 'oficina' },
@@ -115,7 +129,7 @@ window.OFI_INIT = function () {
   xdSheet = () => { }; // sem XD na Mundicacau
   // depois de criar uma ficha, abre-a (fotos, etiqueta, cronómetro)
   const save0 = save;
-  save = async (col, id, vals) => { const r = await save0(col, id, vals); if (r && col === 'fichas' && !id) setTimeout(() => go('ofi', { id: r }), 60); return r; };
+  save = async (col, id, vals) => { const r = await save0(col, id, vals); if (r && col === 'fichas' && !id) setTimeout(() => go('ofi', { id: r }), 60); if (r && col === 'locais' && !id && S.ofLocalPara) { const fid = S.ofLocalPara; S.ofLocalPara = null; await save0('fichas', fid, { local: r }); } return r; };
 
   /* ---------- estilos ---------- */
   const st = document.createElement('style');
@@ -141,17 +155,18 @@ window.OFI_INIT = function () {
 .of-n{display:inline-grid;place-items:center;min-width:44px;height:44px;padding:0 6px;border-radius:10px;background:var(--surface-2);font-weight:600;font-variant-numeric:tabular-nums;flex:none}
 .of-sum td{padding:8px 0}
 [data-act="xdPed"]{display:none!important}
+a.btn.pri{color:#fff}
 .of-stop{background:var(--bad)!important;border-color:var(--bad)!important;color:#fff!important}
 `;
   document.head.appendChild(st);
 
   /* ---------- linhas de lista ---------- */
   function fRow(f) {
-    const e = ent(f.entidade), d = dias(f);
-    const sub = [cod(f), TIPO_C[f.tipo], nomeEq(f), f.avaria].filter(Boolean).join(' · ');
+    const e = ent(f.entidade), d = dias(f), l = fora(f) ? loc(f) : null;
+    const sub = [cod(f), TIPO_C[f.tipo], l?.localidade, nomeEq(f), f.avaria].filter(Boolean).join(' · ');
     const late = f.tipo === 'oficina' && ABERTOS.includes(f.estado) && d > 30;
     return `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero}</span>
-      <span class="rt"><span class="r1">${esc(prop(f))}${f.proprietario && e && f.proprietario !== e.nome ? ` <small style="color:var(--ink-3)">· ${esc(e.nome)}</small>` : ''}</span><span class="r2">${esc(sub)}</span></span>
+      <span class="rt"><span class="r1">${l ? esc(l.nome) + ` <small style="color:var(--ink-3)">· ${esc(e?.nome || '')}</small>` : esc(prop(f)) + (f.proprietario && e && f.proprietario !== e.nome ? ` <small style="color:var(--ink-3)">· ${esc(e.nome)}</small>` : '')}</span><span class="r2">${esc(sub)}</span></span>
       <span class="rr">${badge(EST[f.estado] || f.estado, EST_T[f.estado])}${f.tipo === 'oficina' ? `<span class="note${late ? '' : ''}" style="${late ? 'color:var(--bad);font-weight:500' : ''}">${d} d</span>` : f.prevista ? `<span class="note">${fD(f.prevista)}</span>` : ''}${aberto(f) ? badge('A contar tempo', 'warn') : ''}</span></div>`;
   }
   const byEntrada = (a, b) => (b.entrada || '').localeCompare(a.entrada || '');
@@ -208,24 +223,35 @@ window.OFI_INIT = function () {
     if (S.ofPick && S.ofPick.id !== f.id) S.ofPick = null;
     const e = ent(f.entidade) || {}, tel = e.telemovel || e.telefone, ro = !S.canWrite, v = valores(f), run = aberto(f);
     const addr = [e.morada, e.cp, e.localidade].filter(Boolean).join(', ');
-    const dest = e.lat && e.lng ? `${e.lat},${e.lng}` : addr;
+    const L0 = fora(f) ? loc(f) : null, xy = ondeXY(f), dest = xy ? `${xy.lat},${xy.lng}` : (L0 ? [L0.morada, L0.cp, L0.localidade].filter(Boolean).join(', ') : addr);
     const T = tempos(f).sort((a, b) => (b.inicio || '').localeCompare(a.inicio || ''));
     const mod = S.ofPick?.mod ?? f.modelo ?? '', grp = S.ofPick?.grp ?? f.grupo ?? '', q = S.ofPick?.q || '';
     const res = S.ofPick?.open ? pecasDe(mod, grp).filter(a => !q || norm(a.nome + ' ' + (a.ref || '')).includes(norm(q))).slice(0, 60) : [];
     let h = `<div class="pg">${roBanner()}
     <div><button class="btn sm" data-act="go" data-v="oficina">${ic('back', 16)}Oficina</button></div>
-    <div class="fh"><span class="of-n" style="min-width:56px;height:56px;font-size:20px">${f.numero}</span><div style="min-width:0;flex:1"><h1>${esc(prop(f))}</h1>
-      <div class="meta">${badge(cod(f), 'info')}${badge(EST[f.estado], EST_T[f.estado])}${badge(TIPO_C[f.tipo], 'gold')}${f.proprietario && e.nome && f.proprietario !== e.nome ? badge('Cliente: ' + e.nome) : ''}${f.tipo === 'oficina' ? badge(`Entrou a ${fDY(f.entrada)} · ${dias(f)} d`, dias(f) > 30 && ABERTOS.includes(f.estado) ? 'bad' : 'mute') : f.prevista ? badge('Agendada ' + fDY(f.prevista)) : ''}${f.faturado ? badge('Faturado', 'ok') : ''}</div></div></div>
+    <div class="fh"><span class="of-n" style="min-width:56px;height:56px;font-size:20px">${f.numero}</span><div style="min-width:0;flex:1"><h1>${esc(L0 ? L0.nome : prop(f))}</h1>
+      <div class="meta">${badge(cod(f), 'info')}${badge(EST[f.estado], EST_T[f.estado])}${badge(TIPO_C[f.tipo], 'gold')}${(L0 || (f.proprietario && f.proprietario !== e.nome)) && e.nome ? badge('Cliente: ' + e.nome) : ''}${f.tipo === 'oficina' ? badge(`Entrou a ${fDY(f.entrada)} · ${dias(f)} d`, dias(f) > 30 && ABERTOS.includes(f.estado) ? 'bad' : 'mute') : f.prevista ? badge('Agendada ' + fDY(f.prevista)) : ''}${f.faturado ? badge('Faturado', 'ok') : ''}</div></div></div>
     <div class="panel"><div class="pb" style="padding-top:12px"><div class="kv">${[['Equipamento', nomeEq(f)], ['N.º de série', f.nSerie], ['Grupo', f.grupo], ['Avaria / pedido', f.avaria], ['Técnico', f.resp ? nameOf(f.resp) : ''], ['Notas', f.notas]].filter(x => x[1]).map(([l, x]) => `<div class="kvi"><span>${l}</span><b style="white-space:pre-wrap">${esc(x)}</b></div>`).join('')}</div></div></div>
     <div class="acts"><a class="act ${tel ? '' : 'off'}" href="tel:${esc(telClean(tel))}">${ic('phone')}<span>Ligar</span></a><a class="act ${e.telemovel ? '' : 'off'}" href="https://wa.me/${esc(waNum(e.telemovel))}" target="_blank" rel="noopener">${ic('wa')}<span>WhatsApp</span></a><a class="act ${e.email ? '' : 'off'}" href="mailto:${esc(e.email || '')}">${ic('mail')}<span>Email</span></a><a class="act ${dest ? '' : 'off'}" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}" target="_blank" rel="noopener">${ic('pin')}<span>Ir até lá</span></a></div>
     ${ro ? '' : `<div class="of-row2"><button class="btn" data-act="ofiLabel" data-id="${f.id}">${ic('qr', 16)}Imprimir etiqueta</button>${f.tipo === 'oficina' ? `<button class="btn" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrada">${ic('doc', 16)}Comprovativo de entrada</button>` : ''}<button class="btn ${['pronto', 'entregue'].includes(f.estado) ? 'pri' : ''}" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrega">${ic('doc', 16)}${f.tipo === 'oficina' ? 'Guia de entrega' : 'Folha de serviço'}</button><button class="btn" data-act="ofiAviso" data-id="${f.id}">${ic('send', 16)}${fora(f) ? 'Enviar relatório ao cliente' : 'Avisar cliente'}</button><button class="btn" data-act="ofiEdit" data-id="${f.id}">${ic('edit', 16)}Editar ficha</button></div>`}
     <div class="panel"><div class="ph"><h2>Estado</h2>${f.avisadoEm ? `<span class="note">Cliente avisado ${fD(f.avisadoEm)}</span>` : ''}</div><div class="pb"><div class="of-est">${Object.entries(EST).map(([k, l]) => `<button class="chipb ${f.estado === k ? 'on' : ''}" data-act="ofiEst" data-id="${f.id}" data-c="${k}" ${ro ? 'disabled' : ''}>${l}</button>`).join('')}</div></div></div>`;
 
+    // local da assistência (cliente do cliente)
+    if (fora(f)) {
+      const LS = D('locais').filter(x => x.entidade === f.entidade && x.ativo !== false).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+      h += `<div class="panel" ${L0 ? '' : 'style="border-color:var(--gold)"'}><div class="ph"><h2>Local da assistência</h2><span class="note">onde está a máquina</span></div><div class="pb">
+        ${L0 ? `<p style="margin:0 0 4px"><b>${esc(L0.nome)}</b></p><p class="note" style="margin:0 0 10px">${esc([[L0.morada, L0.cp, L0.localidade].filter(Boolean).join(', '), [L0.contacto, L0.telefone].filter(Boolean).join(' · ')].filter(Boolean).join(' · ') || 'Sem morada')}${L0.notas ? '<br>' + esc(L0.notas) : ''}</p>
+          <div class="of-row2" style="margin-bottom:12px">${L0.telefone ? `<a class="btn sm" href="tel:${esc(telClean(L0.telefone))}">${ic('phone', 16)}Ligar para o local</a>` : ''}<a class="btn sm" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}" target="_blank" rel="noopener">${ic('pin', 16)}Ir até lá</a>${ro ? '' : `<button class="btn sm" data-act="edit" data-col="locais" data-id="${L0.id}">${ic('edit', 16)}Editar local</button>`}</div>`
+        : `<p class="note" style="margin:0 0 10px">A assistência é no cliente do cliente? Escolha o local (ex.: o café onde está a máquina). Se for na morada de ${esc(e.nome || 'cliente')}, deixe em branco.</p>`}
+        ${ro ? '' : `<div class="of-row2"><div class="fld" style="flex:1;min-width:200px;margin:0"><label for="oflocal">Local</label><select id="oflocal" data-oflocal="${f.id}"><option value="">Na morada de ${esc(e.nome || 'cliente')}</option>${LS.map(x => `<option value="${x.id}" ${x.id === f.local ? 'selected' : ''}>${esc(x.nome)}${x.localidade ? ' · ' + esc(x.localidade) : ''}</option>`).join('')}</select></div><button class="btn" style="align-self:flex-end" data-act="ofiLocalNovo" data-id="${f.id}">${ic('plus', 16)}Novo local</button></div>`}
+      </div></div>`;
+    }
+
     // deslocação
     if (fora(f)) {
       const dc = f.km != null ? deslCalc(e, f.km) : null;
       h += `<div class="panel"><div class="ph"><h2>Deslocação</h2><span class="note">${e.deslModo === 'escaloes' ? 'Cliente por escalões' : 'Cliente por km'}</span></div><div class="pb">
-        ${f.chegadaEm ? `<p style="margin:0 0 8px">Chegou a ${fD(f.chegadaEm)} · <b>${fmtKm(f.km)} km</b> desde a ${esc(cfg().empresa)}${f.chegadaLat ? ` · <a href="https://www.google.com/maps/search/?api=1&query=${f.chegadaLat},${f.chegadaLng}" target="_blank" rel="noopener">ver no mapa</a>` : ''}</p>` : '<p class="note" style="margin:0 0 10px">Quando chegar ao cliente, carregue em «Estou aqui». O telemóvel envia a localização, calcula os km desde a empresa e começa a contar o tempo de trabalho.</p>'}
+        ${f.chegadaEm ? `<p style="margin:0 0 8px">Chegou a ${fD(f.chegadaEm)} · <b>${fmtKm(f.km)} km</b> desde a ${esc(cfg().empresa)}${f.chegadaLat ? ` · <a href="https://www.google.com/maps/search/?api=1&query=${f.chegadaLat},${f.chegadaLng}" target="_blank" rel="noopener">ver no mapa</a>` : ''}</p>` : '<p class="note" style="margin:0 0 10px">Quando chegar ao local, carregue em «Estou aqui». O telemóvel envia a localização, calcula os km desde a empresa e começa a contar o tempo de trabalho.</p>'}
         ${dc && S.verValores ? `<p class="note" style="margin:0 0 10px">${esc(dc.txt)} = <b>${eur(dc.valor)}</b></p>` : ''}
         ${ro ? '' : `<div class="of-row2"><button class="btn pri of-big" data-act="ofiAqui" data-id="${f.id}">${ic('pin', 18)}${f.chegadaEm ? 'Atualizar localização' : 'Estou aqui'}</button><div class="fld" style="width:130px;margin:0"><label for="ofkm">Km (corrigir)</label><input id="ofkm" type="number" step="0.1" inputmode="decimal" data-ofkm="${f.id}" value="${f.km ?? ''}"></div></div>`}
       </div></div>`;
@@ -282,16 +308,16 @@ window.OFI_INIT = function () {
   VIEWS.rotaof = () => loadingOr(() => {
     const c = cfg();
     const L = D('fichas').filter(f => fora(f) && ABERTOS.includes(f.estado) && (!f.prevista || f.prevista <= TODAY()) && (S.f.rotaof !== 'Minhas' || !f.resp || f.resp === S.uid));
-    const com = L.map(f => { const e = ent(f.entidade) || {}; return { f, e, d: e.lat && e.lng ? hav(c.baseLat, c.baseLng, e.lat, e.lng) : null }; });
+    const com = L.map(f => { const e = ent(f.entidade) || {}, l = loc(f), xy = ondeXY(f); return { f, e, l, xy, d: xy ? hav(c.baseLat, c.baseLng, xy.lat, xy.lng) : null }; });
     const ok = com.filter(x => x.d != null).sort((a, b) => b.d - a.d), sem = com.filter(x => x.d == null);
-    const pts = ok.map(x => `${x.e.lat},${x.e.lng}`);
+    const pts = ok.map(x => `${x.xy.lat},${x.xy.lng}`);
     const gm = pts.length ? `https://www.google.com/maps/dir/?api=1&origin=${c.baseLat},${c.baseLng}&destination=${pts[pts.length - 1]}${pts.length > 1 ? '&waypoints=' + encodeURIComponent(pts.slice(0, -1).join('|')) : ''}&travelmode=driving` : '';
     return `<div class="pg">${roBanner()}
       <div class="chips">${['Todas', 'Minhas'].map(x => `<button class="chipb ${(S.f.rotaof || 'Todas') === x ? 'on' : ''}" data-act="chip" data-v="rotaof" data-c="${x}">${x}</button>`).join('')}</div>
       <p class="note" style="margin:0">Assistências por fazer até hoje, por ordem: começa no cliente mais longe da ${esc(c.empresa)} e acaba no mais perto, para terminar o dia perto de casa.</p>
       ${gm ? `<a class="btn pri of-big" href="${esc(gm)}" target="_blank" rel="noopener">${ic('route', 18)}Abrir percurso no Google Maps</a>` : ''}
-      <div class="panel">${ok.length ? ok.map((x, i) => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${x.f.id}"><span class="of-n">${i + 1}</span><span class="rt"><span class="r1">${esc(x.e.nome || '')}</span><span class="r2">${esc([x.e.localidade, '≈ ' + Math.round(x.d * 1.3) + ' km', nomeEq(x.f), x.f.avaria].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(cod(x.f))}</span></div>`).join('') : '<div class="empty"><b>Sem assistências para hoje</b>As assistências no cliente aparecem aqui por ordem.</div>'}</div>
-      ${sem.length ? `<div class="panel"><div class="ph"><h2>Sem localização</h2></div><div class="pb" style="padding-bottom:4px"><p class="note" style="margin:0">Estes clientes ainda não têm coordenadas. Ficam com elas na primeira vez que alguém carregar em «Estou aqui».</p></div>${sem.map(x => fRow(x.f)).join('')}</div>` : ''}
+      <div class="panel">${ok.length ? ok.map((x, i) => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${x.f.id}"><span class="of-n">${i + 1}</span><span class="rt"><span class="r1">${x.l ? esc(x.l.nome) + ` <small style="color:var(--ink-3)">· ${esc(x.e.nome || '')}</small>` : esc(x.e.nome || '')}</span><span class="r2">${esc([(x.l || x.e).localidade, '≈ ' + Math.round(x.d * 1.3) + ' km', nomeEq(x.f), x.f.avaria].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(cod(x.f))}</span></div>`).join('') : '<div class="empty"><b>Sem assistências para hoje</b>As assistências no cliente aparecem aqui por ordem.</div>'}</div>
+      ${sem.length ? `<div class="panel"><div class="ph"><h2>Sem localização</h2></div><div class="pb" style="padding-bottom:4px"><p class="note" style="margin:0">Estes locais ainda não têm coordenadas. Ficam com elas na primeira vez que alguém carregar em «Estou aqui».</p></div>${sem.map(x => fRow(x.f)).join('')}</div>` : ''}
     </div>`;
   });
 
@@ -330,6 +356,7 @@ window.OFI_INIT = function () {
     const box = S.verValores ? `<div class="mini"><div><span>Preço/hora</span><b>${eur(e.precoHora ?? cfg().precoHora)}</b></div><div><span>Deslocação</span><b style="font-size:15px">${e.deslModo === 'escaloes' ? 'Escalões · ' + esc(t?.nome || 'sem tabela') : 'Por km · ' + eur(e.precoKm ?? cfg().precoKm) + '/km'}</b></div></div>` : '';
     const c = `${box}${S.canWrite ? `<div class="of-row2"><button class="btn sm" data-act="ofiNew" data-preset='${esc(JSON.stringify({ entidade: e.id, tipo: 'oficina' }))}'>${ic('plus', 16)}Entrada na oficina</button><button class="btn sm" data-act="ofiNew" data-preset='${esc(JSON.stringify({ entidade: e.id, tipo: 'local' }))}'>${ic('pin', 16)}Assistência no cliente</button></div>` : ''}
       ${L.length ? `<div class="panel">${L.map(fRow).join('')}</div>` : '<div class="panel empty"><b>Sem assistências</b></div>'}
+      ${(() => { const LS = D('locais').filter(x => x.entidade === e.id).sort((a, b) => a.nome.localeCompare(b.nome, 'pt')); return `<div class="panel"><div class="ph"><h2>Locais de assistência</h2><span class="note">clientes deste cliente</span>${S.canWrite ? `<button class="lnk" data-act="new" data-col="locais" data-preset='${esc(JSON.stringify({ entidade: e.id }))}'>Novo local</button>` : ''}</div>${LS.length ? LS.map(x => `<div class="row" role="button" tabindex="0" data-act="${S.canWrite ? 'edit' : 'noop'}" data-col="locais" data-id="${x.id}"><span class="rt"><span class="r1">${esc(x.nome)}</span><span class="r2">${esc([x.localidade, x.contacto, x.telefone].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(D('fichas').filter(f => f.local === x.id).length + ' fichas')}</span></div>`).join('') : '<div class="pb"><p class="note" style="margin:0">Sem locais. Se este cliente tem máquinas em casa dos seus clientes (ex.: um torrefator), registe aqui esses locais.</p></div>'}</div>`; })()}
       ${orc.length && S.verValores ? `<div class="panel"><div class="ph"><h2>Orçamentos</h2></div><div class="pb"><table class="tt"><tbody>${orc.map(f => `<tr data-act="ofiOpen" data-id="${f.id}" style="cursor:pointer"><td>${esc(cod(f))} · ${esc(nomeEq(f))}${f.orcEm ? ' · ' + fDY(f.orcEm) : ''}</td><td>${badge({ enviado: 'Enviado', aceite: 'Aceite', recusado: 'Recusado' }[f.orcEstado] || 'Por enviar')}</td><td class="num">${eur(f.orcValor)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
     const k = h.lastIndexOf('</div>'); return h.slice(0, k) + c + h.slice(k);
   };
@@ -339,8 +366,9 @@ window.OFI_INIT = function () {
   ACT.ofiOpen = d => { S.ofPick = null; go('ofi', { id: d.id }); };
   ACT.ofiNew = d => { let p = null; try { p = d.preset ? JSON.parse(d.preset) : null; } catch (_) { } openForm('fichas', null, p); };
   ACT.ofiEdit = d => openForm('fichas', d.id);
+  ACT.ofiLocalNovo = d => { const f = fx(d.id); if (!f) return; S.ofLocalPara = f.id; openForm('locais', null, { entidade: f.entidade }); };
   ACT.ofiGrupo = d => { S.f.oficina = 'eq:' + d.c; go('oficina'); };
-  const new0 = ACT.new; ACT.new = (d, b, e) => d.col === 'fichas' ? ACT.ofiNew(d) : new0(d, b, e);
+  const new0 = ACT.new; ACT.new = (d, b, e) => { if (d.col === 'locais') S.ofLocalPara = null; return d.col === 'fichas' ? ACT.ofiNew(d) : new0(d, b, e); };
   ACT.quick = () => {
     const eid = S.view === 'ficha' ? S.params.id : null, pre = o => esc(JSON.stringify(Object.assign(eid ? { entidade: eid } : {}, o)));
     openSheet(`<div class="sh"><h2>Criar${eid ? ' para ' + esc(entName(eid)) : ''}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb"><div class="mgrid">
@@ -380,7 +408,7 @@ window.OFI_INIT = function () {
     navigator.geolocation.getCurrentPosition(async pos => {
       const { latitude: lat, longitude: lng } = pos.coords; const r = await kmEstrada(lat, lng);
       await patch('fichas', f.id, { chegadaEm: new Date().toISOString(), chegadaLat: lat, chegadaLng: lng, km: r.km, deslValor: deslCalc(ent(f.entidade), r.km)?.valor ?? null });
-      const e = ent(f.entidade); if (e && (!e.lat || !e.lng)) await patch('entidades', e.id, { lat, lng });
+      const l = loc(f), e = ent(f.entidade); if (l) { if (!l.lat || !l.lng) await patch('locais', l.id, { lat, lng }); } else if (e && (!e.lat || !e.lng)) await patch('entidades', e.id, { lat, lng });
       await iniciaCrono(fx(f.id)); b.disabled = false; toast(`${fmtKm(r.km)} km (${r.fonte}) · tempo a contar`);
     }, err => { b.disabled = false; toast(err.code === 1 ? 'Sem autorização para a localização. Escreva os km à mão.' : 'Não foi possível obter a localização'); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 });
   };
@@ -412,6 +440,7 @@ window.OFI_INIT = function () {
     if (ds.oftxt && S.canWrite) { await patch('fichas', ds.id, { [ds.oftxt]: t.value }); toast('Guardado'); return; }
     if (ds.oforc && S.canWrite) { await patch('fichas', ds.id, { [ds.oforc]: ds.oforc === 'orcValor' ? (t.value === '' ? null : parseFloat(t.value)) : t.value }); return; }
     if (ds.ofkm && S.canWrite) { const km = t.value === '' ? null : parseFloat(t.value), f = fx(ds.ofkm); await patch('fichas', f.id, { km, deslValor: km == null ? null : deslCalc(ent(f.entidade), km)?.valor ?? null }); toast('Km atualizados'); return; }
+    if (ds.oflocal && S.canWrite) { await patch('fichas', ds.oflocal, { local: t.value || null }); toast(t.value ? 'Local escolhido' : 'Na morada do cliente'); return; }
     if (ds.offat && S.canWrite) { await patch('fichas', ds.offat, { faturado: t.checked }); return; }
     if (ds.ofp && S.ofPick) { S.ofPick[ds.ofp] = t.value; if (ds.ofp === 'mod') S.ofPick.grp = ''; render(); }
   });
@@ -425,7 +454,7 @@ window.OFI_INIT = function () {
   }
   function msgRelatorio(f) {
     const e = ent(f.entidade) || {}, v = valores(f), P0 = f.pecas || [];
-    const t = [`Relatório de assistência · ficha ${cod(f)}`, '', `Cliente: ${e.nome || ''}`, `Data: ${fDY(f.chegadaEm || TODAY())}`, `Equipamento: ${nomeEq(f)}${f.nSerie ? ' · n.º de série ' + f.nSerie : ''}`, f.resp ? `Técnico: ${nameOf(f.resp)}` : '', f.chegadaEm ? `Chegada: ${fD(f.chegadaEm)}` : '', `Tempo de trabalho: ${fmtMin(v.min)}`, f.km != null ? `Deslocação: ${fmtKm(f.km)} km` : '', f.avaria ? `\nPedido: ${f.avaria}` : '', f.trabalho ? `\nTrabalho realizado:\n${f.trabalho}` : '', P0.length ? `\nPeças aplicadas:\n${P0.map(p => `- ${p.qt} × ${p.nome}${p.ref ? ' (' + p.ref + ')' : ''}`).join('\n')}` : '', (f.fotos || []).length ? `\nFotos: ${(f.fotos || []).map(fotoF).join('\n')}` : ''].filter(x => x !== '').join('\n');
+    const t = [`Relatório de assistência · ficha ${cod(f)}`, '', `Cliente: ${e.nome || ''}`, ondeTxt(f) ? `Local: ${ondeTxt(f)}` : '', `Data: ${fDY(f.chegadaEm || TODAY())}`, `Equipamento: ${nomeEq(f)}${f.nSerie ? ' · n.º de série ' + f.nSerie : ''}`, f.resp ? `Técnico: ${nameOf(f.resp)}` : '', f.chegadaEm ? `Chegada: ${fD(f.chegadaEm)}` : '', `Tempo de trabalho: ${fmtMin(v.min)}`, f.km != null ? `Deslocação: ${fmtKm(f.km)} km` : '', f.avaria ? `\nPedido: ${f.avaria}` : '', f.trabalho ? `\nTrabalho realizado:\n${f.trabalho}` : '', P0.length ? `\nPeças aplicadas:\n${P0.map(p => `- ${p.qt} × ${p.nome}${p.ref ? ' (' + p.ref + ')' : ''}`).join('\n')}` : '', (f.fotos || []).length ? `\nFotos: ${(f.fotos || []).map(fotoF).join('\n')}` : ''].filter(x => x !== '').join('\n');
     return { assunto: `Relatório de assistência · ficha ${cod(f)} · ${e.nome || ''}`, texto: t + `\n\nObrigado.${assinOf()}` };
   }
   function msgOrc(f) {
@@ -478,7 +507,7 @@ window.OFI_INIT = function () {
   const nota = f => `Guarde esta referência: ${cod(f)}. É a mesma que vai aparecer na fatura.`;
   function linhasDoc(f, tipo) {
     const e = ent(f.entidade) || {}, v = valores(f), L = [];
-    L.push(['Referência', cod(f)], ['Cliente', e.nome || ''], ...(f.proprietario && f.proprietario !== e.nome ? [['Proprietário', f.proprietario]] : []), ['Equipamento', nomeEq(f)], ...(f.nSerie ? [['N.º de série', f.nSerie]] : []));
+    L.push(['Referência', cod(f)], ['Cliente', e.nome || ''], ...(fora(f) && loc(f) ? [['Local', ondeTxt(f)]] : []), ...(f.proprietario && f.proprietario !== e.nome ? [['Proprietário', f.proprietario]] : []), ['Equipamento', nomeEq(f)], ...(f.nSerie ? [['N.º de série', f.nSerie]] : []));
     if (tipo === 'entrada') L.push(['Data de entrada', fD(f.entrada)], ['Avaria / pedido', f.avaria || '—'], ...(f.prevista ? [['Data prevista', fDY(f.prevista)]] : []));
     else L.push(['Data de entrada', fDY(f.entrada)], [f.tipo === 'oficina' ? 'Data de entrega' : 'Data do serviço', fDY(f.entregueEm || f.chegadaEm || new Date().toISOString())], ...(f.avaria ? [['Pedido', f.avaria]] : []), ...(f.trabalho ? [['Trabalho realizado', f.trabalho]] : []), ['Tempo de trabalho', fmtMin(v.min)], ...(fora(f) && f.km != null ? [['Deslocação', fmtKm(f.km) + ' km']] : []));
     return L;

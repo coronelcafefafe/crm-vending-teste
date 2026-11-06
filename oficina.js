@@ -52,11 +52,17 @@ window.OFI_INIT = function () {
     const pk = +(e?.precoKm ?? c.precoKm) || 0, mult = c.idaVolta ? 2 : 1;
     return { valor: km * mult * pk, txt: `${fmtKm(km)} km${mult === 2 ? ' × 2 (ida e volta)' : ''} × ${eur(pk)}/km` };
   }
+  // tempo faturado: blocos de meia hora; passa da tolerância (5 min) → bloco seguinte; mínimo 1 h fora, ½ h na oficina
+  function faturaMin(f, min) {
+    const c = cfg(), bl = +c.blocoMin || 30, tol = +(c.toleranciaMin ?? 5), mn = fora(f) ? +(c.minimoForaMin ?? 60) : +(c.minimoOficinaMin ?? 30);
+    if (min <= 0 && !(fora(f) && f.chegadaEm)) return 0;
+    return Math.max(mn, Math.ceil(Math.max(0, Math.round(min) - tol) / bl) * bl);
+  }
   function valores(f) {
-    const min = minutos(f), mo = min / 60 * precoH(f);
+    const min = minutos(f), fmin = faturaMin(f, min), mo = fmin / 60 * precoH(f);
     const d = fora(f) && f.km != null ? deslCalc(ent(f.entidade), f.km) : null;
     const pc = (f.pecas || []).reduce((s, p) => s + (+p.qt || 0) * (+p.preco || 0), 0);
-    return { min, mo, desl: d, pc, total: mo + (d?.valor || 0) + pc };
+    return { min, fmin, mo, desl: d, pc, total: mo + (d?.valor || 0) + pc };
   }
 
   /* ---------- distância ---------- */
@@ -277,7 +283,7 @@ a.btn.pri{color:#fff}
     }
 
     // cronómetro
-    h += `<div class="panel"><div class="ph"><h2>Tempo de trabalho</h2><span class="note">Total ${fmtMin(v.min)}</span></div><div class="pb">
+    h += `<div class="panel"><div class="ph"><h2>Tempo de trabalho</h2><span class="note">Total ${fmtMin(v.min)}${v.fmin ? ' · a faturar ' + fmtMin(v.fmin) : ''}</span></div><div class="pb">
       <div class="of-row2"><div style="flex:1"><div class="of-crono" id="ofcrono" data-ini="${run ? esc(run.inicio) : ''}">${run ? '00:00:00' : fmtMin(v.min)}</div><span class="note">${run ? 'A contar desde ' + fD(run.inicio) + (run.resp ? ' · ' + esc(nameOf(run.resp)) : '') : 'Parado'}</span></div>
       ${ro ? '' : `<button class="btn pri of-big ${run ? 'of-stop' : ''}" style="flex:0 0 170px" data-act="ofiCrono" data-id="${f.id}">${ic('clock', 18)}${run ? 'Parar' : 'Iniciar'}</button>`}</div>
       ${T.length ? `<table class="tt" style="margin-top:12px"><tbody>${T.slice(0, 8).map(t => `<tr><td>${fD(t.inicio)}${t.resp ? ' · ' + esc(nameOf(t.resp)) : ''}</td><td class="num">${t.fim ? fmtMin(t.minutos) : 'a contar'}</td></tr>`).join('')}</tbody></table>` : ''}
@@ -316,7 +322,7 @@ a.btn.pri{color:#fff}
         <div class="fld" style="grid-column:1/-1"><label for="oforn">Descrição do orçamento</label><textarea id="oforn" data-oforc="orcNotas" data-id="${f.id}" placeholder="Ex.: substituição da resistência e vedantes da caldeira">${esc(f.orcNotas || '')}</textarea></div></div>
         <div class="of-row2" style="margin-top:10px"><button class="btn" data-act="ofiOrc" data-id="${f.id}">${ic('send', 16)}Enviar orçamento</button>${f.orcEstado ? `<button class="btn sm" data-act="ofiOrcE" data-id="${f.id}" data-c="aceite">Aceite</button><button class="btn sm" data-act="ofiOrcE" data-id="${f.id}" data-c="recusado">Recusado</button>` : ''}${f.orcEm ? `<span class="note">Enviado ${fD(f.orcEm)}</span>` : ''}</div></div></div>`;
       h += `<div class="panel"><div class="ph"><h2>Ficha de custo</h2><b class="num">${eur(v.total)}</b></div><div class="pb"><table class="tt of-sum"><tbody>
-        <tr><td>Mão de obra · ${fmtMin(v.min)} × ${eur(precoH(f))}/h</td><td class="num">${eur(v.mo)}</td></tr>
+        <tr><td>Mão de obra · ${fmtMin(v.fmin)} a faturar (tempo real ${fmtMin(v.min)}${fora(f) ? ', mínimo ' + fmtMin(cfg().minimoForaMin ?? 60) + ' fora' : ', mínimo ' + fmtMin(cfg().minimoOficinaMin ?? 30) + ' na oficina'}) × ${eur(precoH(f))}/h</td><td class="num">${eur(v.mo)}</td></tr>
         ${fora(f) ? `<tr><td>Deslocação${v.desl ? ' · ' + esc(v.desl.txt) : ' · falta a localização ou os km'}</td><td class="num">${eur(v.desl?.valor || 0)}</td></tr>` : ''}
         <tr><td>Peças · ${(f.pecas || []).reduce((s, p) => s + (+p.qt || 0), 0)} un</td><td class="num">${eur(v.pc)}</td></tr>
         <tr><td><b>Total sem IVA</b></td><td class="num"><b>${eur(v.total)}</b></td></tr></tbody></table>
@@ -351,17 +357,21 @@ a.btn.pri{color:#fff}
       <div class="panel"><div class="ph"><h2>Preços padrão</h2></div><div class="pb"><div class="fg" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
         <div class="fld"><label for="cf-ph">Preço/hora (€)</label><input id="cf-ph" type="number" step="0.01" value="${c.precoHora ?? ''}"></div>
         <div class="fld"><label for="cf-pk">Preço por km (€)</label><input id="cf-pk" type="number" step="0.01" value="${c.precoKm ?? ''}"></div>
+        <div class="fld"><label for="cf-bl">Faturar em blocos de (min)</label><input id="cf-bl" type="number" step="1" value="${c.blocoMin ?? 30}"></div>
+        <div class="fld"><label for="cf-tol">Tolerância antes do bloco seguinte (min)</label><input id="cf-tol" type="number" step="1" value="${c.toleranciaMin ?? 5}"></div>
+        <div class="fld"><label for="cf-mf">Mínimo nas assistências fora (min)</label><input id="cf-mf" type="number" step="1" value="${c.minimoForaMin ?? 60}"></div>
+        <div class="fld"><label for="cf-mo">Mínimo na oficina (min)</label><input id="cf-mo" type="number" step="1" value="${c.minimoOficinaMin ?? 30}"></div>
         <div class="fld"><label for="cf-lat">Morada da empresa · latitude</label><input id="cf-lat" type="number" step="any" value="${c.baseLat ?? ''}"></div>
         <div class="fld"><label for="cf-lng">longitude</label><input id="cf-lng" type="number" step="any" value="${c.baseLng ?? ''}"></div></div>
         <label class="tog"><input id="cf-iv" type="checkbox" ${c.idaVolta ? 'checked' : ''}><span>Nos clientes por km, cobrar ida e volta</span></label>
-        <p class="note" style="margin:0 0 10px">Cada cliente pode ter o seu preço/hora e a sua forma de cobrar a deslocação (na ficha do cliente). Os escalões contam a distância de ida.</p>
+        <p class="note" style="margin:0 0 10px">Exemplo com blocos de 30 min e 5 min de tolerância: 35 min fatura ½ h, 36 min fatura 1 h, 1 h 06 fatura 1 h 30. Cada cliente pode ter o seu preço/hora e a sua forma de cobrar a deslocação (na ficha do cliente). Os escalões contam a distância de ida.</p>
         ${S.isAdmin ? '<button class="btn pri" data-act="ofCfgSave">Guardar</button>' : '<p class="note">Só o administrador altera estes valores.</p>'}</div></div>
       <div class="panel"><div class="ph"><h2>Tabelas de escalões</h2></div><div class="pb">
         <p class="note" style="margin-top:0">Escreva os escalões como «até km = valor», separados por ponto e vírgula. Ex.: 40=30; 70=50; 150=90</p>
         ${D('desl_tabelas').map(t => `<div class="fg" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;align-items:end;margin-bottom:10px"><div class="fld"><label>Nome</label><input data-dtn="${t.id}" value="${esc(t.nome)}"></div><div class="fld"><label>Escalões</label><input data-dte="${t.id}" value="${esc(escTxt(t.escaloes))}"></div><button class="btn" data-act="ofTabSave" data-id="${t.id}">Guardar</button></div><p class="note" style="margin:-4px 0 14px">${D('entidades').filter(e => e.deslTabela === t.id).length} clientes usam esta tabela</p>`).join('')}
         ${S.canWrite ? '<button class="btn" data-act="ofTabNew">' + ic('plus', 16) + 'Nova tabela</button>' : ''}</div></div></div>`;
   });
-  ACT.ofCfgSave = async () => { const n = id => { const x = $('#' + id).value; return x === '' ? null : parseFloat(x); }; if (await patch('oficina_config', 1, { precoHora: n('cf-ph'), precoKm: n('cf-pk'), baseLat: n('cf-lat'), baseLng: n('cf-lng'), idaVolta: $('#cf-iv').checked })) toast('Guardado'); };
+  ACT.ofCfgSave = async () => { const n = id => { const x = $('#' + id).value; return x === '' ? null : parseFloat(x); }; if (await patch('oficina_config', 1, { precoHora: n('cf-ph'), precoKm: n('cf-pk'), blocoMin: n('cf-bl') || 30, toleranciaMin: n('cf-tol') ?? 5, minimoForaMin: n('cf-mf') ?? 60, minimoOficinaMin: n('cf-mo') ?? 30, baseLat: n('cf-lat'), baseLng: n('cf-lng'), idaVolta: $('#cf-iv').checked })) toast('Guardado'); };
   ACT.ofTabSave = async d => { const nome = $(`[data-dtn="${d.id}"]`).value.trim(), L = parseEsc($(`[data-dte="${d.id}"]`).value); if (!nome || !L.length) return toast('Falta o nome ou os escalões'); if (await patch('desl_tabelas', d.id, { nome, escaloes: L })) toast('Tabela guardada'); };
   ACT.ofTabNew = async () => { await save('desl_tabelas', null, { nome: 'Nova tabela', escaloes: [{ ate: 40, valor: 30 }, { ate: 70, valor: 50 }, { ate: 150, valor: 90 }] }); };
 
@@ -510,7 +520,7 @@ a.btn.pri{color:#fff}
   }
   function msgRelatorio(f) {
     const e = ent(f.entidade) || {}, v = valores(f), P0 = f.pecas || [];
-    const t = [`Relatório de assistência · ficha ${cod(f)}`, '', `Cliente: ${e.nome || ''}`, ondeTxt(f) ? `Local: ${ondeTxt(f)}` : '', `Data: ${fDY(f.chegadaEm || TODAY())}`, `Equipamento: ${nomeEq(f)}${f.nSerie ? ' · n.º de série ' + f.nSerie : ''}`, f.resp ? `Técnico: ${nameOf(f.resp)}` : '', f.chegadaEm ? `Chegada: ${fD(f.chegadaEm)}` : '', `Tempo de trabalho: ${fmtMin(v.min)}`, f.km != null ? `Deslocação: ${fmtKm(f.km)} km` : '', f.avaria ? `\nPedido: ${f.avaria}` : '', f.trabalho ? `\nTrabalho realizado:\n${f.trabalho}` : '', P0.length ? `\nPeças aplicadas:\n${P0.map(p => `- ${p.qt} × ${p.nome}${p.ref ? ' (' + p.ref + ')' : ''}`).join('\n')}` : '', (f.fotos || []).length ? `\nFotos: ${(f.fotos || []).map(fotoF).join('\n')}` : ''].filter(x => x !== '').join('\n');
+    const t = [`Relatório de assistência · ficha ${cod(f)}`, '', `Cliente: ${e.nome || ''}`, ondeTxt(f) ? `Local: ${ondeTxt(f)}` : '', `Data: ${fDY(f.chegadaEm || TODAY())}`, `Equipamento: ${nomeEq(f)}${f.nSerie ? ' · n.º de série ' + f.nSerie : ''}`, f.resp ? `Técnico: ${nameOf(f.resp)}` : '', f.chegadaEm ? `Chegada: ${fD(f.chegadaEm)}` : '', `Tempo de trabalho: ${fmtMin(v.min)}${v.fmin && v.fmin !== Math.round(v.min) ? ` (a faturar: ${fmtMin(v.fmin)})` : ''}`, f.km != null ? `Deslocação: ${fmtKm(f.km)} km` : '', f.avaria ? `\nPedido: ${f.avaria}` : '', f.trabalho ? `\nTrabalho realizado:\n${f.trabalho}` : '', P0.length ? `\nPeças aplicadas:\n${P0.map(p => `- ${p.qt} × ${p.nome}${p.ref ? ' (' + p.ref + ')' : ''}`).join('\n')}` : '', (f.fotos || []).length ? `\nFotos: ${(f.fotos || []).map(fotoF).join('\n')}` : ''].filter(x => x !== '').join('\n');
     return { assunto: `Relatório de assistência · ficha ${cod(f)} · ${e.nome || ''}`, texto: t + `\n\nObrigado.${assinOf()}` };
   }
   function msgOrc(f) {
@@ -565,7 +575,7 @@ a.btn.pri{color:#fff}
     const e = ent(f.entidade) || {}, v = valores(f), L = [];
     L.push(['Referência', cod(f)], ['Cliente', e.nome || ''], ...(fora(f) && loc(f) ? [['Local', ondeTxt(f)]] : []), ...(f.proprietario && f.proprietario !== e.nome ? [['Proprietário', f.proprietario]] : []), ['Equipamento', nomeEq(f)], ...(f.nSerie ? [['N.º de série', f.nSerie]] : []));
     if (tipo === 'entrada') L.push(['Data de entrada', fD(f.entrada)], ['Avaria / pedido', f.avaria || '—'], ...(f.prevista ? [['Data prevista', fDY(f.prevista)]] : []));
-    else L.push(['Data de entrada', fDY(f.entrada)], [f.tipo === 'oficina' ? 'Data de entrega' : 'Data do serviço', fDY(f.entregueEm || f.chegadaEm || new Date().toISOString())], ...(f.avaria ? [['Pedido', f.avaria]] : []), ...(f.trabalho ? [['Trabalho realizado', f.trabalho]] : []), ['Tempo de trabalho', fmtMin(v.min)], ...(fora(f) && f.km != null ? [['Deslocação', fmtKm(f.km) + ' km']] : []));
+    else L.push(['Data de entrada', fDY(f.entrada)], [f.tipo === 'oficina' ? 'Data de entrega' : 'Data do serviço', fDY(f.entregueEm || f.chegadaEm || new Date().toISOString())], ...(f.avaria ? [['Pedido', f.avaria]] : []), ...(f.trabalho ? [['Trabalho realizado', f.trabalho]] : []), ['Tempo de trabalho', fmtMin(v.min) + (v.fmin && v.fmin !== Math.round(v.min) ? ` (a faturar: ${fmtMin(v.fmin)})` : '')], ...(fora(f) && f.km != null ? [['Deslocação', fmtKm(f.km) + ' km']] : []));
     return L;
   }
   function textoDoc(f, tipo) {
@@ -621,7 +631,7 @@ a.btn.pri{color:#fff}
     L.forEach(f => {
       const e = ent(f.entidade) || {}, v = valores(f), dt = (f.entregueEm || f.prontoEm || f.entrada || '').slice(0, 10), base = [cod(f), dt, e.nome || '', e.nif || ''];
       const desc = `Ficha ${cod(f)} · ${nomeEq(f)}${f.nSerie ? ' S/N ' + f.nSerie : ''}`;
-      if (v.min > 0) rows.push([...base, 'MO', 'Mão de obra · ' + desc, n(v.min / 60), n(precoH(f)), 23, n(v.mo)]);
+      if (v.fmin > 0) rows.push([...base, 'MO', 'Mão de obra · ' + desc, n(v.fmin / 60), n(precoH(f)), 23, n(v.mo)]);
       if (v.desl) rows.push([...base, 'DESL', 'Deslocação · ' + v.desl.txt, 1, n(v.desl.valor), 23, n(v.desl.valor)]);
       (f.pecas || []).forEach(p => rows.push([...base, p.ref || '', p.nome, n(p.qt), n(p.preco), 23, n(p.qt * p.preco)]));
       if (f.orcValor != null && f.orcEstado === 'aceite' && !v.min && !(f.pecas || []).length) rows.push([...base, 'ORC', 'Reparação conforme orçamento · ' + desc, 1, n(f.orcValor), 23, n(f.orcValor)]);

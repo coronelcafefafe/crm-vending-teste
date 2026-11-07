@@ -17,6 +17,23 @@ window.OFI_INIT = function () {
   const naCasa = f => ['oficina', 'guarda'].includes(f.tipo) && !['entregue', 'cancelado'].includes(f.estado);
   const ESPERA = ['recebido', 'aguarda_peca', 'orcamento'], CURSO = ['diagnostico', 'reparacao'];
   const estL = f => f.tipo === 'guarda' && f.estado === 'recebido' ? 'Guardado' : EST[f.estado] || f.estado;
+  /* ---------- módulos por plano ---------- */
+  const MODS = [
+    ['fora', 'Assistências fora', 'Trabalhos no cliente, «Estou aqui», km, locais e rota do dia'],
+    ['ativos', 'Ativos e guarda de máquinas', 'O que cada cliente tem na empresa e máquinas só guardadas'],
+    ['stock', 'Stock de peças', 'Baixa automática pelas fichas, stock mínimo e lista de encomenda'],
+    ['garantias', 'Máquinas e garantias', 'Histórico por n.º de série, garantia e aviso de retrabalho'],
+    ['link', 'Link do cliente', 'O cliente acompanha a reparação e aceita o orçamento'],
+    ['planeamento', 'Planear trabalho', 'Lotes, tempos médios, kits e peças a preparar'],
+    ['rendimento', 'Rendimento dos técnicos', 'Faturação por técnico e tempos'],
+    ['croquis', 'Croquis das peças', 'Desenhos do catálogo com os números clicáveis'],
+    ['sage', 'Integração Sage', 'Ficheiro para faturar no Sage', 'integra'],
+    ['avisos', 'Avisos automáticos', 'Email e WhatsApp enviados pelo servidor', 'integra']];
+  const PLANOS = { base: ['Base', []], profissional: ['Profissional', ['fora', 'ativos', 'stock', 'garantias', 'link']], empresa: ['Empresa', MODS.map(m => m[0])] };
+  const temMod = k => (cfg().modulos || {})[k] !== false;
+  const VMOD = { rotaof: 'fora', ativos: 'ativos', encomendarp: 'stock', stock: 'stock', equip: 'garantias', equipum: 'garantias', planear: 'planeamento', tempos: 'planeamento', tecnicosof: 'rendimento' };
+  SO_VALORES.push('modulos');
+  window.MODV = v => !VMOD[v] || temMod(VMOD[v]);
   const cfg = () => S.data.oficina_config.get(1) || { empresa: 'Mundicacau', precoHora: 30, precoKm: 0.4, idaVolta: true, baseLat: 41.19025117241961, baseLng: -8.450665245494452 };
   const prop = f => f.proprietario || entName(f.entidade);
   const loc = f => f.local ? S.data.locais.get(f.local) : null;
@@ -108,11 +125,11 @@ window.OFI_INIT = function () {
   for (let i = NAV.length - 1; i >= 0; i--) if (tirar.includes(NAV[i][0])) NAV.splice(i, 1);
   for (let i = NAV.length - 1; i >= 0; i--) if (['maquinas', 'mapa'].includes(NAV[i][0])) NAV.splice(i, 1);
   NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['planear', 'Planear trabalho', 'cal'], ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route'], ['ativos', 'Ativos dos clientes', 'box'], ['equip', 'Máquinas (n.º de série)', 'tool']);
-  const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['encomendarp', 'Peças a encomendar', 'box'], ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro']);
+  const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['encomendarp', 'Peças a encomendar', 'box'], ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro'], ['modulos', 'Plano e módulos', 'grid']);
   for (let i = NAV.length - 1; i > 0; i--) if (NAV[i][0] === 'sep' && (NAV[i - 1][0] === 'sep' || i === NAV.length - 1)) NAV.splice(i, 1);
   SO_VALORES.push('ofcfg', 'tecnicosof');
   TABS.splice(0, TABS.length, ['inicio', 'Início', 'home'], ['meudia', 'O meu dia', 'clock'], ['oficina', 'Oficina', 'tool'], ['clientes', 'Clientes', 'users'], ['mais', 'Mais', 'menu']);
-  Object.assign(TITLES, { equip: 'Máquinas por n.º de série', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
+  Object.assign(TITLES, { modulos: 'Plano e módulos', equip: 'Máquinas por n.º de série', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
   Object.defineProperty(TITLES, 'ofi', { get() { const f = S.data.fichas.get(S.params?.id); return f ? 'Ficha ' + cod(f) : 'Ficha'; } });
   const nc0 = navCounts; navCounts = () => ({ ...nc0(), oficina: D('fichas').filter(f => f.tipo !== 'guarda' && ABERTOS.includes(f.estado)).length });
 
@@ -143,7 +160,7 @@ window.OFI_INIT = function () {
   ];
   NOMES.fichas = ['ficha', 'Nova ficha de assistência'];
   F.fichas = [
-    { k: 'tipo', l: 'Tipo de trabalho', t: 'sel', o: TIPO, req: 1, def: 'oficina' },
+    { k: 'tipo', l: 'Tipo de trabalho', t: 'sel', get o() { return Object.fromEntries(Object.entries(TIPO).filter(([k]) => k === 'oficina' || (k === 'guarda' ? temMod('ativos') : temMod('fora')))); }, req: 1, def: 'oficina' },
     { k: 'estado', l: 'Estado', t: 'sel', o: EST, req: 1, def: 'recebido' },
     { k: 'entidade', l: 'Cliente', t: 'ent', req: 1, full: 1 },
     { k: 'proprietario', l: 'Proprietário da peça (sai na etiqueta) · vazio = nome do cliente', t: 'text', full: 1 },
@@ -272,7 +289,7 @@ a.btn.pri{color:#fff}
     <div class="mini" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))"><div><span>Na oficina</span><b>${naOf.length}</b></div><div><span>Prontos por entregar</span><b>${prontos.length}</b></div><div><span>Assistências por fazer</span><b>${hoje.length}</b></div><div><span>Há mais de 30 dias</span><b style="color:${antigos.length ? 'var(--bad)' : 'inherit'}">${antigos.length}</b></div></div>
     ${S.canWrite ? `<div class="of-row2"><button class="btn pri of-big" data-act="ofiNew" data-preset='{"tipo":"oficina"}'>${ic('plus', 18)}Entrada na oficina</button><button class="btn of-big" data-act="ofiNew" data-preset='{"tipo":"local"}'>${ic('pin', 18)}Assistência no cliente</button><button class="btn of-big" data-act="go" data-v="planear">${ic('cal', 18)}Planear trabalho</button></div>` : ''}
     ${alertasH()}
-    ${(() => { const n = aEncomendar().length; return n ? `<div class="of-alert" style="border-color:#B45309"><span style="flex:1"><b>${n} ${n === 1 ? 'peça precisa' : 'peças precisam'} de ser encomendada${n === 1 ? '' : 's'}</b><br><span class="note">Abaixo do stock mínimo ou em falta para os planos marcados.</span></span><button class="btn sm" data-act="go" data-v="encomendarp">Ver lista</button></div>` : ''; })()}
+    ${(() => { const n = temMod('stock') ? aEncomendar().length : 0; return n ? `<div class="of-alert" style="border-color:#B45309"><span style="flex:1"><b>${n} ${n === 1 ? 'peça precisa' : 'peças precisam'} de ser encomendada${n === 1 ? '' : 's'}</b><br><span class="note">Abaixo do stock mínimo ou em falta para os planos marcados.</span></span><button class="btn sm" data-act="go" data-v="encomendarp">Ver lista</button></div>` : ''; })()}
     ${porAvisar.length ? `<div class="panel"><div class="ph"><h2>Prontos · avisar o cliente</h2></div>${porAvisar.map(fRow).join('')}</div>` : ''}
     <div class="panel"><div class="ph"><h2>Assistências no cliente</h2><button class="lnk" data-act="go" data-v="rotaof">Ver rota</button></div>${hoje.length ? hoje.map(fRow).join('') : '<div class="empty">Sem assistências por fazer.</div>'}</div>
     ${antigos.length ? `<div class="panel"><div class="ph"><h2>Há mais tempo na oficina</h2></div>${antigos.slice(0, 6).map(fRow).join('')}</div>` : ''}
@@ -300,7 +317,7 @@ a.btn.pri{color:#fff}
      ${(() => { const cl = [...new Set(D('fichas').filter(f => ['pronto', 'entregue'].includes(f.estado) && !f.faturado).map(f => f.entidade))].map(id => [id, entName(id)]).sort((a, b) => a[1].localeCompare(b[1], 'pt')); return `<div class="panel"><div class="ph"><h2>${S.verValores ? 'Faturar e PDF das fichas' : 'PDF das fichas'}</h2></div><div class="pb">
        <p class="note" style="margin-top:0">${porFat} fichas prontas ou entregues ainda por faturar.${S.verValores ? ' O Excel serve de base para lançar no Sage.' : ''}</p>
        <div class="fld" style="max-width:360px"><label for="offcli">Cliente</label><select id="offcli"><option value="">Todos os clientes</option>${cl.map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('')}</select></div>
-       <div class="of-row2">${S.verValores ? `<button class="btn" data-act="ofiExport" ${porFat ? '' : 'disabled'}>${ic('dl', 16)}Excel para faturar</button><button class="btn" data-act="ofiPdfLote" data-c="1" ${porFat ? '' : 'disabled'}>${ic('doc', 16)}PDF com preços</button>` : ''}<button class="btn" data-act="ofiPdfLote" data-c="0" ${porFat ? '' : 'disabled'}>${ic('doc', 16)}PDF sem preços${S.verValores ? ' (para o cliente)' : ''}</button></div></div></div>`; })()}
+       <div class="of-row2">${S.verValores && temMod('sage') ? `<button class="btn" data-act="ofiExport" ${porFat ? '' : 'disabled'}>${ic('dl', 16)}Excel para faturar</button><button class="btn" data-act="ofiPdfLote" data-c="1" ${porFat ? '' : 'disabled'}>${ic('doc', 16)}PDF com preços</button>` : ''}<button class="btn" data-act="ofiPdfLote" data-c="0" ${porFat ? '' : 'disabled'}>${ic('doc', 16)}PDF sem preços${S.verValores ? ' (para o cliente)' : ''}</button></div></div></div>`; })()}
     </div>`;
   });
 
@@ -320,8 +337,8 @@ a.btn.pri{color:#fff}
     <div class="fh"><span class="of-n" style="min-width:56px;height:56px;font-size:20px">${f.numero ?? "•"}</span><div style="min-width:0;flex:1"><h1>${esc(L0 ? L0.nome : prop(f))}</h1>
       <div class="meta">${badge(cod(f), 'info')}${badge(estL(f), EST_T[f.estado])}${badge(TIPO_C[f.tipo], 'gold')}${(L0 || (f.proprietario && f.proprietario !== e.nome)) && e.nome ? badge('Cliente: ' + e.nome) : ''}${['oficina', 'guarda'].includes(f.tipo) ? badge(`Entrou a ${fDY(f.entrada)} · ${dias(f)} d`, dias(f) > 30 && ABERTOS.includes(f.estado) ? 'bad' : 'mute') : f.prevista ? badge('Agendada ' + fDY(f.prevista)) : ''}${f.faturado ? badge('Faturado', 'ok') : ''}${fechada(f) && garantiaAte(f) >= TODAY() ? badge('Garantia até ' + fDY(garantiaAte(f)), 'ok') : ''}${f.emGarantia ? badge('Em garantia', 'ok') : ''}</div></div></div>
     ${avisoGarantia(f)}
-    ${f.tipo !== 'guarda' ? `<div class="of-row2" style="flex-wrap:wrap;gap:6px"><span class="note">Garantia desta ficha:</span>${S.canWrite ? Object.entries(GAR).map(([k, l]) => `<button class="chipb ${(f.garantiaTipo || 'pecas') === k ? 'on' : ''}" data-act="ofiGarT" data-id="${f.id}" data-c="${k}">${l}${k === 'sem' ? '' : ' · ' + durL(gDias({ garantiaTipo: k }))}</button>`).join('') : `<b>${GAR[f.garantiaTipo || 'pecas']}${f.garantiaTipo === 'sem' ? '' : ' · ' + durL(gDias(f))}</b>`}</div>` : ''}
-    ${nsN(f.nSerie) && D('fichas').filter(x => nsN(x.nSerie) === nsN(f.nSerie)).length > 1 ? `<div><button class="btn sm" data-act="ofiEquip" data-c="${esc(nsN(f.nSerie))}">${ic('clock', 16)}Histórico desta máquina (${D('fichas').filter(x => nsN(x.nSerie) === nsN(f.nSerie)).length} intervenções)</button></div>` : ''}
+    ${f.tipo !== 'guarda' && temMod('garantias') ? `<div class="of-row2" style="flex-wrap:wrap;gap:6px"><span class="note">Garantia desta ficha:</span>${S.canWrite ? Object.entries(GAR).map(([k, l]) => `<button class="chipb ${(f.garantiaTipo || 'pecas') === k ? 'on' : ''}" data-act="ofiGarT" data-id="${f.id}" data-c="${k}">${l}${k === 'sem' ? '' : ' · ' + durL(gDias({ garantiaTipo: k }))}</button>`).join('') : `<b>${GAR[f.garantiaTipo || 'pecas']}${f.garantiaTipo === 'sem' ? '' : ' · ' + durL(gDias(f))}</b>`}</div>` : ''}
+    ${temMod('garantias') && nsN(f.nSerie) && D('fichas').filter(x => nsN(x.nSerie) === nsN(f.nSerie)).length > 1 ? `<div><button class="btn sm" data-act="ofiEquip" data-c="${esc(nsN(f.nSerie))}">${ic('clock', 16)}Histórico desta máquina (${D('fichas').filter(x => nsN(x.nSerie) === nsN(f.nSerie)).length} intervenções)</button></div>` : ''}
     <div class="panel"><div class="pb" style="padding-top:12px"><div class="kv">${[['Equipamento', nomeEq(f)], ['N.º de série', f.nSerie], ['Grupo', f.grupo], ['Avaria / pedido', f.avaria], ['Técnico', f.tecnico ? tecNome(f.tecnico) : (f.resp ? nameOf(f.resp) : '')], ['Notas', f.notas]].filter(x => x[1]).map(([l, x]) => `<div class="kvi"><span>${l}</span><b style="white-space:pre-wrap">${esc(x)}</b></div>`).join('')}</div></div></div>
     <div class="acts"><a class="act ${tel ? '' : 'off'}" href="tel:${esc(telClean(tel))}">${ic('phone')}<span>Ligar</span></a><a class="act ${e.telemovel ? '' : 'off'}" href="https://wa.me/${esc(waNum(e.telemovel))}" target="_blank" rel="noopener">${ic('wa')}<span>WhatsApp</span></a><a class="act ${e.email ? '' : 'off'}" href="mailto:${esc(e.email || '')}">${ic('mail')}<span>Email</span></a><a class="act ${dest ? '' : 'off'}" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}" target="_blank" rel="noopener">${ic('pin')}<span>Ir até lá</span></a></div>
     ${ro ? (f.modelo ? `<div class="of-row2"><button class="btn" data-act="ofiManuais" data-c="${esc(f.modelo)}">${ic('doc', 16)}Manuais</button></div>` : '') : `<div class="of-row2"><button class="btn" data-act="ofiLabel" data-id="${f.id}">${ic('qr', 16)}Imprimir etiqueta</button>${f.tipo === 'oficina' ? `<button class="btn" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrada">${ic('doc', 16)}Comprovativo de entrada</button>` : ''}<button class="btn ${['pronto', 'entregue'].includes(f.estado) ? 'pri' : ''}" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrega">${ic('doc', 16)}${f.tipo === 'oficina' ? 'Guia de entrega' : 'Folha de serviço'}</button><button class="btn" data-act="ofiAviso" data-id="${f.id}">${ic('send', 16)}${fora(f) ? 'Enviar relatório ao cliente' : 'Avisar cliente'}</button>${f.modelo ? `<button class="btn" data-act="ofiManuais" data-c="${esc(f.modelo)}">${ic('doc', 16)}Manuais${(() => { const n = D('manuais').filter(m => norm(m.modelo) === norm(f.modelo)).length; return n ? ` (${n})` : ''; })()}</button>` : ''}<button class="btn" data-act="ofiPdfUm" data-id="${f.id}">${ic('doc', 16)}PDF da ficha</button><button class="btn" data-act="ofiEdit" data-id="${f.id}">${ic('edit', 16)}Editar ficha</button></div>`}
@@ -382,7 +399,7 @@ a.btn.pri{color:#fff}
     h += `<div class="panel"><div class="ph"><h2>Peças aplicadas</h2>${S.verValores && v.pc ? `<b class="num">${eur(v.pc)}</b>` : ''}</div><div class="pb">
       ${P0.length ? P0.map((p, i) => `<div class="of-pc"><span class="grow">${esc(p.nome)}<small>${esc(p.ref || '')}${S.verValores ? ' · ' + eur(p.preco) + '/un' : ''}</small></span>${ro ? `<b>${p.qt}</b>` : `<span class="of-qt"><button data-act="ofiPq" data-id="${f.id}" data-i="${i}" data-c="-1">−</button><b class="num">${String(p.qt).replace('.', ',')}</b><button data-act="ofiPq" data-id="${f.id}" data-i="${i}" data-c="1">+</button></span>`}</div>`).join('') : '<p class="note" style="margin:0">Ainda sem peças.</p>'}
       ${ro ? '' : `<div class="of-row2" style="margin-top:12px;align-items:flex-end"><div class="fld" style="flex:1;min-width:160px;margin:0"><label for="ofcod">Código da peça</label><input id="ofcod" data-ofcod="${f.id}" placeholder="Ex.: 0V2277" autocomplete="off" autocapitalize="characters" enterkeyhint="done"></div><div class="fld" style="width:76px;margin:0"><label for="ofcodqt">Qt</label><input id="ofcodqt" type="number" min="1" step="1" value="1" inputmode="numeric"></div><button class="btn pri" data-act="ofiCod" data-id="${f.id}">Pôr</button></div>`}
-      ${(() => { const CQ = D('croquis').filter(c => f.modelo && norm(c.modelo) === norm(f.modelo)).sort((a, b) => (a.ordem ?? 999) - (b.ordem ?? 999) || a.grupo.localeCompare(b.grupo, 'pt')); return CQ.length ? `<div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:8px">Croquis do ${esc(f.modelo)} · toque num número</div><div class="of-est">${CQ.map(c => `<button class="chipb ${S.ofCroqui === c.id ? 'on' : ''}" data-act="ofiCroqui" data-c="${c.id}">${esc(c.grupo)}</button>`).join('')}</div>${S.ofCroqui && CQ.some(c => c.id === S.ofCroqui) ? croquiH(f, S.data.croquis.get(S.ofCroqui)) : ''}</div>` : (f.modelo ? `<p class="note" style="margin:12px 0 0">Ainda não há croquis do ${esc(f.modelo)}.</p>` : ''); })()}
+      ${(() => { const CQ = temMod('croquis') ? D('croquis').filter(c => f.modelo && norm(c.modelo) === norm(f.modelo)).sort((a, b) => (a.ordem ?? 999) - (b.ordem ?? 999) || a.grupo.localeCompare(b.grupo, 'pt')) : []; return CQ.length ? `<div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:8px">Croquis do ${esc(f.modelo)} · toque num número</div><div class="of-est">${CQ.map(c => `<button class="chipb ${S.ofCroqui === c.id ? 'on' : ''}" data-act="ofiCroqui" data-c="${c.id}">${esc(c.grupo)}</button>`).join('')}</div>${S.ofCroqui && CQ.some(c => c.id === S.ofCroqui) ? croquiH(f, S.data.croquis.get(S.ofCroqui)) : ''}</div>` : (f.modelo ? `<p class="note" style="margin:12px 0 0">Ainda não há croquis do ${esc(f.modelo)}.</p>` : '').replace(/^(.*)$/s, m => temMod('croquis') ? m : ''); })()}
       ${ro ? '' : !S.ofPick?.open ? `<div style="margin-top:12px"><button class="btn" data-act="ofiPick" data-id="${f.id}">${ic('search', 16)}Procurar peça${f.modelo ? ' do ' + esc(f.modelo) : ''}</button></div>` : `
         <div class="fg" style="margin-top:12px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
           <div class="fld"><label for="ofpm">Modelo</label><select id="ofpm" data-ofp="mod"><option value="">Todos os modelos</option>${modelosL().map(m => `<option ${m === mod ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div>
@@ -480,7 +497,7 @@ a.btn.pri{color:#fff}
     const pre = o => esc(JSON.stringify(Object.assign({ entidade: e.id }, o)));
     let h = `<div class="pg">${roBanner()}<div class="fh"><span class="av">${esc(initials(e.nome))}</span><div style="min-width:0;flex:1"><h1>${esc(e.nome)}</h1><div class="meta">${(e.tipos || []).map(k => badge(TIPOS[k] || k, 'gold')).join('')}${e.localidade ? badge(e.localidade) : ''}${ativos.length ? badge(ativos.length + ' na empresa', 'info') : ''}</div></div>${S.canWrite ? `<button class="btn sm" data-act="edit" data-col="entidades" data-id="${e.id}">${ic('edit', 16)}<span>Editar</span></button>` : ''}</div>
     <div class="acts"><a class="act ${tel ? '' : 'off'}" href="tel:${esc(telClean(tel))}">${ic('phone')}<span>Ligar</span></a><a class="act ${e.telemovel ? '' : 'off'}" href="https://wa.me/${esc(waNum(e.telemovel))}" target="_blank" rel="noopener">${ic('wa')}<span>WhatsApp</span></a><a class="act ${e.email ? '' : 'off'}" href="mailto:${esc(e.email || '')}">${ic('mail')}<span>Email</span></a><a class="act ${addr ? '' : 'off'}" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}" target="_blank" rel="noopener">${ic('pin')}<span>Mapa</span></a></div>
-    ${S.canWrite ? `<div class="of-row2"><button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'oficina' })}'>${ic('tool', 16)}Entrada na oficina</button><button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'local' })}'>${ic('pin', 16)}Assistência fora</button><button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'guarda', equipamento: 'Máquina completa' })}'>${ic('box', 16)}Guardar máquina</button><button class="btn sm" data-act="new" data-col="encomendas" data-preset='${pre({})}'>${ic('euro', 16)}Venda de peças</button></div>` : ''}
+    ${S.canWrite ? `<div class="of-row2"><button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'oficina' })}'>${ic('tool', 16)}Entrada na oficina</button>${temMod('fora') ? `<button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'local' })}'>${ic('pin', 16)}Assistência fora</button>` : ''}${temMod('ativos') ? `<button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'guarda', equipamento: 'Máquina completa' })}'>${ic('box', 16)}Guardar máquina</button>` : ''}<button class="btn sm" data-act="new" data-col="encomendas" data-preset='${pre({})}'>${ic('euro', 16)}Venda de peças</button></div>` : ''}
     <div class="tabs">${tabs.map(([k, l, n]) => `<button class="${tab === k ? 'on' : ''}" data-act="ftab" data-c="${k}">${l}${n ? `<i>${n}</i>` : ''}</button>`).join('')}</div>`;
     if (tab === 'resumo') {
       h += `<div class="panel"><div class="pb" style="padding-top:4px"><div class="kv">${[['Pessoa de contacto', e.contacto], ['Telemóvel', e.telemovel], ['Telefone', e.telefone], ['Email', e.email], ['NIF', e.nif], ['Morada', addr], ...(S.verValores ? [['Preço/hora', eur(e.precoHora ?? cfg().precoHora)], ['Deslocação', e.deslModo === 'escaloes' ? 'Escalões · ' + (t?.nome || 'sem tabela') : 'Por km · ' + eur(e.precoKm ?? cfg().precoKm) + '/km']] : [])].filter(x => x[1]).map(([l, x]) => `<div class="kvi"><span>${l}</span><b>${esc(x)}</b></div>`).join('')}</div>${e.notas ? `<div class="kvi"><span>Notas</span><b style="font-weight:400;white-space:pre-wrap">${esc(e.notas)}</b></div>` : ''}</div></div>
@@ -532,7 +549,7 @@ a.btn.pri{color:#fff}
     const eid = S.view === 'ficha' ? S.params.id : null, pre = o => esc(JSON.stringify(Object.assign(eid ? { entidade: eid } : {}, o)));
     openSheet(`<div class="sh"><h2>Criar${eid ? ' para ' + esc(entName(eid)) : ''}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb"><div class="mgrid">
       <button data-act="ofiNew" data-preset='${pre({ tipo: 'oficina' })}'>${ic('tool', 20)}<span>Entrada na oficina</span></button>
-      <button data-act="ofiNew" data-preset='${pre({ tipo: 'local' })}'>${ic('pin', 20)}<span>Assistência no cliente</span></button>
+      ${temMod('fora') ? `<button data-act="ofiNew" data-preset='${pre({ tipo: 'local' })}'>${ic('pin', 20)}<span>Assistência no cliente</span></button>` : ''}
       <button data-act="ofiNew" data-preset='${pre({ tipo: 'manutencao' })}'>${ic('repeat', 20)}<span>Manutenção</span></button>
       ${eid ? '' : `<button data-act="new" data-col="entidades">${ic('users', 20)}<span>Cliente</span></button>`}
       <button data-act="new" data-col="tarefas" ${eid ? `data-preset='${pre({})}'` : ''}>${ic('cal', 20)}<span>Tarefa</span></button>
@@ -972,6 +989,7 @@ a.btn.pri{color:#fff}
     return null;
   }
   function avisoGarantia(f) {
+    if (!temMod('garantias')) return '';
     if (f.emGarantia) { const o = S.data.fichas.get(f.garantiaDe); return `<div class="of-alert" style="border-color:var(--ok,#1a7f4b)"><span style="flex:1"><b>Reparação em garantia</b><br><span class="note">Não se fatura ao cliente${o ? ` · garantia da ficha ${esc(cod(o))} de ${fDY(fimFecho(o))}` : ''}.</span></span>${S.canWrite ? `<button class="btn sm" data-act="ofiGar" data-id="${f.id}" data-c="0">Tirar da garantia</button>` : ''}</div>`; }
     const a = anterior(f); if (!a) return '';
     return `<div class="of-alert" style="border-color:#B45309"><span style="flex:1"><b>${a.certo ? 'Retrabalho: esta máquina' : 'Possível retrabalho: este cliente'} já teve ${a.certo ? 'uma reparação' : 'uma reparação de ' + esc(f.equipamento)} a ${fDY(fimFecho(a.f))}</b><br><span class="note">Ficha ${esc(cod(a.f))} · garantia até ${fDY(garantiaAte(a.f))}${a.f.trabalho ? ' · ' + esc(a.f.trabalho) : ''}${a.certo ? '' : '. As peças não têm n.º de série: confirme se é a mesma.'}</span></span>
@@ -1007,10 +1025,11 @@ a.btn.pri{color:#fff}
   let SMc = null, SMk = '';
   const stockAll = () => { const k = D('stock_mov').length + ':' + D('artigos').length; if (SMc && SMk === k) return SMc; SMc = window.stockMap ? window.stockMap() : new Map(); SMk = k; return SMc; };
   const stk = id => { const s = stockAll().get(id); return s ? Math.round(s.atual * 100) / 100 : 0; };
-  const stkH = a => { if (!a) return ''; const n = stk(a.id); return ` · <span style="color:${n <= 0 ? 'var(--bad)' : a.stockMin != null && n <= a.stockMin ? '#B45309' : 'inherit'}">stock ${String(n).replace('.', ',')}</span>`; };
+  const stkH = a => { if (!a || !temMod('stock')) return ''; const n = stk(a.id); return ` · <span style="color:${n <= 0 ? 'var(--bad)' : a.stockMin != null && n <= a.stockMin ? '#B45309' : 'inherit'}">stock ${String(n).replace('.', ',')}</span>`; };
   // a peça aplicada na ficha abate ao stock (um movimento "peça" por artigo e por ficha)
   const syncA = new Map();
   async function syncStock(fid) {
+    if (!temMod('stock')) return;
     if (syncA.get(fid)) { syncA.set(fid, 2); return; } syncA.set(fid, 1);
     try {
       const f = fx(fid); if (!f) return;
@@ -1267,6 +1286,22 @@ a.btn.pri{color:#fff}
   });
   document.addEventListener('change', e => { if (e.target?.dataset?.ofmes) { S.f.tecmes = e.target.value; render(); } });
 
+
+  /* ---------- ecrã «Plano e módulos» (administrador) ---------- */
+  VIEWS.modulos = () => loadingOr(() => {
+    if (!S.isAdmin) return '<div class="panel empty"><b>Só o administrador vê o plano</b></div>';
+    const c = cfg(), pl = c.plano || 'empresa';
+    const linha = ([k, n, d, t]) => { const on = temMod(k); return `<label class="row" style="cursor:pointer;align-items:center"><span class="rt"><span class="r1">${esc(n)}${t ? ' ' + badge('Integração', 'info') : ''}${k === 'link' || k === 'avisos' ? ' ' + badge('Em preparação', 'mute') : ''}</span><span class="r2">${esc(d)}</span></span><input type="checkbox" data-ofmod="${k}" ${on ? 'checked' : ''} style="width:24px;height:24px"></label>`; };
+    return `<div class="pg"><div class="panel"><div class="ph"><h2>Plano</h2></div><div class="pb"><div class="of-est">${Object.entries(PLANOS).map(([k, [n, L]]) => `<button class="chipb ${pl === k ? 'on' : ''}" data-act="ofiPlano" data-c="${k}">${n} · ${L.length} módulos</button>`).join('')}${pl === 'medida' ? `<button class="chipb on">À medida</button>` : ''}</div>
+      <p class="note" style="margin:10px 0 0">Ao escolher um plano, os módulos ficam como em baixo. Pode depois ligar ou desligar um a um (fica «À medida»). As fichas, fotos, cronómetro, assinatura, PDF, clientes e manuais estão sempre incluídos. Desligar um módulo não apaga dados: ficam guardados para quando voltar a ligar.</p></div></div>
+      <div class="panel"><div class="ph"><h2>Módulos</h2></div>${MODS.filter(m => !m[3]).map(linha).join('')}</div>
+      <div class="panel"><div class="ph"><h2>Integrações</h2></div>${MODS.filter(m => m[3]).map(linha).join('')}<div class="pb"><p class="note" style="margin:0">As integrações ligam-se por empresa quando houver os dados de cada uma (conta do Sage, email e número de WhatsApp da empresa).</p></div></div></div>`;
+  });
+  const gravaMods = async (modulos, plano) => { if (await patch('oficina_config', 1, { modulos, plano })) toast('Plano atualizado'); };
+  ACT.ofiPlano = d => { const L = PLANOS[d.c][1]; gravaMods(Object.fromEntries(MODS.map(([k]) => [k, L.includes(k)])), d.c); };
+  document.addEventListener('change', e => { const k = e.target?.dataset?.ofmod; if (!k || !S.isAdmin) return; const m = { ...Object.fromEntries(MODS.map(([x]) => [x, temMod(x)])), [k]: e.target.checked }; const pl = Object.entries(PLANOS).find(([, [, L]]) => MODS.every(([x]) => m[x] === L.includes(x))); gravaMods(m, pl ? pl[0] : 'medida'); });
+  // ecrãs de módulos desligados
+  Object.keys(VMOD).forEach(v => { const f0 = VIEWS[v]; if (!f0) return; VIEWS[v] = (...a) => temMod(VMOD[v]) ? f0(...a) : `<div class="pg"><div class="panel empty"><b>Módulo não incluído no plano</b>${S.isAdmin ? '<button class="btn" data-act="go" data-v="modulos">Ver plano e módulos</button>' : 'Fale com o administrador.'}</div></div>`; });
   /* ---------- relógio e QR lido pela câmara ---------- */
   setInterval(() => { const el = document.getElementById('ofcrono'); if (!el || !el.dataset.ini) return; const s = Math.max(0, Math.floor((Date.now() - new Date(el.dataset.ini)) / 1000)); el.textContent = pad(Math.floor(s / 3600)) + ':' + pad(Math.floor(s / 60) % 60) + ':' + pad(s % 60); }, 1000);
   const abreHash = () => { const m = location.hash.match(/^#f=([0-9a-f-]{36})$/); if (!m) return; let n = 0; const t = () => { if (S.uid && S.ready.fichas) { history.replaceState(null, '', location.pathname); go('ofi', { id: m[1] }); } else if (n++ < 300) setTimeout(t, 300); }; t(); };

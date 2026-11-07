@@ -617,7 +617,7 @@ function closeSheet(){$('#sheet').hidden=true;$('#sheetc').innerHTML='';document
 /* ================= navegação ================= */
 const NAV=[['inicio','Início','home'],['leads','Negócios','lead'],['clientes','Clientes','users'],['agenda','Agenda e tarefas','cal'],['visitas','Visitas','pin'],['sep'],['encomendas','Encomendas','box'],['avencas','Avenças','repeat'],['pedidos','Pedidos e assistência','tool'],['pagamentos','Recebimentos','euro'],['pendentes','Pendentes','euro'],['sep'],['catalogo','Catálogo','grid'],['compras','Compras','cart'],['assistente','Assistente Claude','spark'],['sep'],['mais','Equipa e conta','users']];
 const SO_VALORES=['pagamentos','compras','pendentes'];
-const navList=()=>NAV.filter(n=>S.verValores||!SO_VALORES.includes(n[0]));
+const navList=()=>NAV.filter(n=>(S.verValores||!SO_VALORES.includes(n[0]))&&(!window.MODV||n[0]==='sep'||MODV(n[0])));
 const TABS=[['inicio','Início','home'],['clientes','Clientes','users'],['agenda','Agenda','cal'],['pedidos','Pedidos','tool'],['mais','Mais','menu']];
 const TITLES={login:'Entrar',semacesso:'Sem acesso',inicio:'Início',leads:'Negócios',clientes:'Clientes',agenda:'Agenda e tarefas',visitas:'Visitas',encomendas:'Encomendas',propostas:'Propostas',avencas:'Avenças',pedidos:'Pedidos e assistência',pagamentos:'Recebimentos',pendentes:'Pendentes',catalogo:'Catálogo',compras:'Compras',assistente:'Assistente Claude',mais:'Equipa e conta',ficha:'Cliente'};
 function go(v,params={},push=true){if(push&&(S.view!==v||JSON.stringify(S.params)!==JSON.stringify(params)))S.hist.push([S.view,S.params]);if(S.hist.length>30)S.hist.shift();S.view=v;S.params=params;render();window.scrollTo(0,0)}

@@ -22,7 +22,7 @@ window.OFI_INIT = function () {
   const loc = f => f.local ? S.data.locais.get(f.local) : null;
   const ondeXY = f => { const l = loc(f); if (l && l.lat && l.lng) return { lat: l.lat, lng: l.lng }; const e = ent(f.entidade); return e && e.lat && e.lng ? { lat: e.lat, lng: e.lng } : null; };
   const ondeTxt = f => { const l = loc(f); return l ? [l.nome, [l.morada, l.cp, l.localidade].filter(Boolean).join(', ')].filter(Boolean).join(' · ') : ''; };
-  const cod = f => f.codigo || ('MC-' + String(f.numero || '').padStart(4, '0'));
+  const cod = f => f.codigo || (f.numero ? 'MC-' + String(f.numero).padStart(4, '0') : 'Nova · por enviar');
   const nomeEq = f => [f.equipamento, f.modelo ? ((f.marca ? f.marca + ' ' : '') + f.modelo) : ''].filter(Boolean).join(' · ');
   const fmtMin = m => { m = Math.round(m || 0); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min'; };
   const fmtKm = k => (+k || 0).toLocaleString('pt-PT', { maximumFractionDigits: 1 });
@@ -31,11 +31,11 @@ window.OFI_INIT = function () {
   // fotos privadas: links temporários pedidos ao servidor e guardados por 1 hora
   const URLS = new Map(), PEND = new Set(); let urlT = null;
   function fotoF(p) {
-    if (!p || /^https?:|^data:/.test(p)) return p || ''; const c = URLS.get(p); if (c && c.exp > Date.now() + 60000) return c.url;
+    if (!p || /^https?:|^data:|^blob:/.test(p)) return p || ''; const lb = window.OFF?.blob(p); if (lb) return lb; const c = URLS.get(p); if (navigator.onLine === false) return (c && c.url) || `${CFG.url}/storage/v1/object/sign/fichas/${p}`; if (c && c.exp > Date.now() + 60000) return c.url;
     PEND.add(p); clearTimeout(urlT); urlT = setTimeout(pedeUrls, 30); return '';
   }
   async function pedeUrls() {
-    const L = [...PEND]; PEND.clear(); if (!L.length || !S.db) return;
+    const L = [...PEND]; PEND.clear(); if (!L.length || !S.db || navigator.onLine === false) return;
     const { data } = await S.db.storage.from('fichas').createSignedUrls(L, 3600);
     (data || []).forEach(x => { if (!x.signedUrl) return; URLS.set(x.path, { url: x.signedUrl, exp: Date.now() + 3500e3 }); document.querySelectorAll('[data-foto]').forEach(el => { if (el.dataset.foto !== x.path) return; if (el.tagName === 'IMG') el.src = x.signedUrl; else el.href = x.signedUrl; }); });
   }
@@ -244,7 +244,7 @@ a.btn.pri{color:#fff}
     const e = ent(f.entidade), d = dias(f), l = fora(f) ? loc(f) : null;
     const sub = [cod(f), TIPO_C[f.tipo], l?.localidade, nomeEq(f), f.avaria].filter(Boolean).join(' · ');
     const late = f.tipo === 'oficina' && ABERTOS.includes(f.estado) && d > 30;
-    return `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero}</span>
+    return `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero ?? "•"}</span>
       <span class="rt"><span class="r1">${l ? esc(l.nome) + ` <small style="color:var(--ink-3)">· ${esc(e?.nome || '')}</small>` : esc(prop(f)) + (f.proprietario && e && f.proprietario !== e.nome ? ` <small style="color:var(--ink-3)">· ${esc(e.nome)}</small>` : '')}</span><span class="r2">${esc(sub)}</span></span>
       <span class="rr">${badge(estL(f), EST_T[f.estado])}${['oficina', 'guarda'].includes(f.tipo) ? `<span class="note${late ? '' : ''}" style="${late ? 'color:var(--bad);font-weight:500' : ''}">${d} d</span>` : f.prevista ? `<span class="note">${fD(f.prevista)}</span>` : ''}${aberto(f) ? badge('A contar tempo', 'warn') : ''}</span></div>`;
   }
@@ -311,7 +311,7 @@ a.btn.pri{color:#fff}
     const res = S.ofPick?.open ? pecasDe(mod, grp).filter(a => !q || norm(a.nome + ' ' + (a.ref || '')).includes(norm(q))).slice(0, 60) : [];
     let h = `<div class="pg">${roBanner()}
     <div><button class="btn sm" data-act="go" data-v="oficina">${ic('back', 16)}Oficina</button></div>
-    <div class="fh"><span class="of-n" style="min-width:56px;height:56px;font-size:20px">${f.numero}</span><div style="min-width:0;flex:1"><h1>${esc(L0 ? L0.nome : prop(f))}</h1>
+    <div class="fh"><span class="of-n" style="min-width:56px;height:56px;font-size:20px">${f.numero ?? "•"}</span><div style="min-width:0;flex:1"><h1>${esc(L0 ? L0.nome : prop(f))}</h1>
       <div class="meta">${badge(cod(f), 'info')}${badge(estL(f), EST_T[f.estado])}${badge(TIPO_C[f.tipo], 'gold')}${(L0 || (f.proprietario && f.proprietario !== e.nome)) && e.nome ? badge('Cliente: ' + e.nome) : ''}${['oficina', 'guarda'].includes(f.tipo) ? badge(`Entrou a ${fDY(f.entrada)} · ${dias(f)} d`, dias(f) > 30 && ABERTOS.includes(f.estado) ? 'bad' : 'mute') : f.prevista ? badge('Agendada ' + fDY(f.prevista)) : ''}${f.faturado ? badge('Faturado', 'ok') : ''}</div></div></div>
     <div class="panel"><div class="pb" style="padding-top:12px"><div class="kv">${[['Equipamento', nomeEq(f)], ['N.º de série', f.nSerie], ['Grupo', f.grupo], ['Avaria / pedido', f.avaria], ['Técnico', f.tecnico ? tecNome(f.tecnico) : (f.resp ? nameOf(f.resp) : '')], ['Notas', f.notas]].filter(x => x[1]).map(([l, x]) => `<div class="kvi"><span>${l}</span><b style="white-space:pre-wrap">${esc(x)}</b></div>`).join('')}</div></div></div>
     <div class="acts"><a class="act ${tel ? '' : 'off'}" href="tel:${esc(telClean(tel))}">${ic('phone')}<span>Ligar</span></a><a class="act ${e.telemovel ? '' : 'off'}" href="https://wa.me/${esc(waNum(e.telemovel))}" target="_blank" rel="noopener">${ic('wa')}<span>WhatsApp</span></a><a class="act ${e.email ? '' : 'off'}" href="mailto:${esc(e.email || '')}">${ic('mail')}<span>Email</span></a><a class="act ${dest ? '' : 'off'}" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}" target="_blank" rel="noopener">${ic('pin')}<span>Ir até lá</span></a></div>
@@ -448,7 +448,7 @@ a.btn.pri{color:#fff}
   const prometH = f => { if (!f.prevista) return ''; const atr = f.prevista < TODAY() && ABERTOS.includes(f.estado); return `<span class="note" style="${atr ? 'color:var(--bad);font-weight:500' : ''}">Prometido ${fDY(f.prevista)}</span>`; };
   function linhaEspera(f) {
     const d = dias(f), l = loc(f);
-    return `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}${l ? ` <small style="color:var(--ink-3)">· ${esc(l.nome)}</small>` : ''}</span><span class="r2">${esc([cod(f), TIPO_C[f.tipo], f.avaria].filter(Boolean).join(' · '))}</span></span>
+    return `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero ?? "•"}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}${l ? ` <small style="color:var(--ink-3)">· ${esc(l.nome)}</small>` : ''}</span><span class="r2">${esc([cod(f), TIPO_C[f.tipo], f.avaria].filter(Boolean).join(' · '))}</span></span>
       <span class="rr">${badge(estL(f), EST_T[f.estado])}<span class="note" style="${d > 30 ? 'color:var(--bad);font-weight:500' : ''}">há ${d} d</span>${prometH(f)}</span></div>`;
   }
   VIEWS.ficha = () => {
@@ -503,7 +503,7 @@ a.btn.pri{color:#fff}
       <div class="mini"><div><span>Clientes com material cá</span><b>${m.size}</b></div><div><span>Itens na empresa</span><b>${A.length}</b></div><div><span>Em guarda</span><b>${A.filter(f => f.tipo === 'guarda').length}</b></div><div><span>Em reparação / prontos</span><b>${A.filter(f => f.tipo === 'oficina').length}</b></div></div>
       <div class="tb"><div class="tbr"><label class="srch">${ic('search', 18)}<input id="q-ativos" data-q="ativos" type="search" placeholder="Cliente, equipamento, código ou n.º de série" value="${esc(S.q.ativos || '')}" autocomplete="off"></label>${S.canWrite ? `<button class="btn" data-act="ofiNew" data-preset='{"tipo":"guarda","equipamento":"Máquina completa"}'>${ic('box', 18)}<span>Guardar máquina</span></button>` : ''}</div></div>
       <p class="note" style="margin:0">Só aparecem clientes com alguma coisa na empresa (em reparação, pronta por levantar ou em guarda). Os dias contam desde a entrada, para a futura taxa de espaço.</p>
-      ${C.length ? C.map(c => `<div class="panel"><div class="ph"><h2><a href="#" data-act="ofiCli" data-id="${c.id}" style="color:inherit;text-decoration:none">${esc(c.nome)}</a></h2><span class="note">${esc(resumo(c.L))}</span></div>${c.L.map(f => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}</span><span class="r2">${esc([cod(f), f.nSerie ? 'S/N ' + f.nSerie : '', 'entrou ' + fDY(f.entrada)].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(estL(f), EST_T[f.estado])}<span class="note" style="${dias(f) > 90 ? 'color:var(--bad);font-weight:500' : ''}">${dias(f)} d</span></span></div>`).join('')}</div>`).join('') : '<div class="panel empty"><b>Nenhum cliente tem material na empresa</b></div>'}
+      ${C.length ? C.map(c => `<div class="panel"><div class="ph"><h2><a href="#" data-act="ofiCli" data-id="${c.id}" style="color:inherit;text-decoration:none">${esc(c.nome)}</a></h2><span class="note">${esc(resumo(c.L))}</span></div>${c.L.map(f => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero ?? "•"}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}</span><span class="r2">${esc([cod(f), f.nSerie ? 'S/N ' + f.nSerie : '', 'entrou ' + fDY(f.entrada)].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(estL(f), EST_T[f.estado])}<span class="note" style="${dias(f) > 90 ? 'color:var(--bad);font-weight:500' : ''}">${dias(f)} d</span></span></div>`).join('')}</div>`).join('') : '<div class="panel empty"><b>Nenhum cliente tem material na empresa</b></div>'}
     </div>`;
   });
   ACT.ofiCli = d => go('ficha', { id: d.id });
@@ -970,7 +970,7 @@ a.btn.pri{color:#fff}
     const F = l.fichas.map(id => S.data.fichas.get(id)).filter(Boolean);
     return `<div class="panel"><div class="ph"><h2>Lote ${i + 1} · ${F.length} × ${esc(l.equipamento)}</h2><span class="note">≈ ${fmtMin(l.est)}${l.min != null ? ' · feito em ' + fmtMin(l.min) : ''}</span></div>
       <div class="pb" style="padding-bottom:4px"><p class="note" style="margin:0">${esc(l.modelo || '')} · ${esc(estimativa(l.equipamento, tid).fonte)} · ${fmtMin(estimativa(l.equipamento, tid).min)} cada</p></div>
-      ${F.map(f => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero}</span><span class="rt"><span class="r1">${esc(cod(f))} · ${esc(prop(f))}</span><span class="r2">${esc([f.avaria, 'entrou ' + fDY(f.entrada)].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(estL(f), EST_T[f.estado])}<span class="note" style="${dias(f) > 30 ? 'color:var(--bad);font-weight:500' : ''}">${dias(f)} d</span></span></div>`).join('')}${extra}</div>`;
+      ${F.map(f => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero ?? "•"}</span><span class="rt"><span class="r1">${esc(cod(f))} · ${esc(prop(f))}</span><span class="r2">${esc([f.avaria, 'entrou ' + fDY(f.entrada)].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(estL(f), EST_T[f.estado])}<span class="note" style="${dias(f) > 30 ? 'color:var(--bad);font-weight:500' : ''}">${dias(f)} d</span></span></div>`).join('')}${extra}</div>`;
   }
   function pecasH(L, plano) {
     const P0 = pecasLote(L); if (!P0.length) return `<div class="panel"><div class="ph"><h2>Peças a preparar</h2></div><div class="pb"><p class="note" style="margin:0">Sem kit para estes trabalhos. Defina os kits em «Tempos e kits».</p></div></div>`;

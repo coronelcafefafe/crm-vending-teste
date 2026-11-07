@@ -343,6 +343,7 @@ table.tt{width:100%;border-collapse:collapse;font-size:13.5px}
 <script src="config.js"></script>
 <script src="maquinas.js"></script>
 <script src="oficina.js"></script>
+<script src="offline.js"></script>
 <script src="extrato.js"></script>
 <script>
 "use strict";
@@ -600,12 +601,13 @@ const putLocal=(col,row)=>{if(row){const o=fromRow(row);S.data[col].set(o.id,o);
 async function save(col,id,vals){
  if(!canAct())return null;
  const row=toRow(vals);
+ if(window.OFF)return OFF.save(col,id,row);
  const q=id?S.db.from(col).update(row).eq('id',id):S.db.from(col).insert(row);
  const{data,error}=await q.select().single();
  if(error){dbErr(error);return null}
  putLocal(col,data);return data.id}
-async function patch(col,id,p){if(!canAct())return false;const{data,error}=await S.db.from(col).update(toRow(p)).eq('id',id).select().single();if(error){dbErr(error);return false}putLocal(col,data);return true}
-async function remove(col,id){if(!canAct())return false;const{error}=await S.db.from(col).delete().eq('id',id);if(error){dbErr(error);return false}S.data[col].delete(id);schedule();return true}
+async function patch(col,id,p){if(!canAct())return false;if(window.OFF)return OFF.patch(col,id,toRow(p));const{data,error}=await S.db.from(col).update(toRow(p)).eq('id',id).select().single();if(error){dbErr(error);return false}putLocal(col,data);return true}
+async function remove(col,id){if(!canAct())return false;if(window.OFF)return OFF.remove(col,id);const{error}=await S.db.from(col).delete().eq('id',id);if(error){dbErr(error);return false}S.data[col].delete(id);schedule();return true}
 
 /* ================= toast / sheet ================= */
 let tT;function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(tT);tT=setTimeout(()=>t.hidden=true,2600)}
@@ -1346,6 +1348,7 @@ async function start(session){
 if(window.MAQ_INIT)MAQ_INIT();
 if(window.EXT_INIT)EXT_INIT();
 if(window.OFI_INIT)OFI_INIT();
+if(window.OFF_INIT)OFF_INIT();
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 boot();
 </script>

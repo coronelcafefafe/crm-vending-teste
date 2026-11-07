@@ -28,7 +28,19 @@ window.OFI_INIT = function () {
   const fmtKm = k => (+k || 0).toLocaleString('pt-PT', { maximumFractionDigits: 1 });
   const dias = f => Math.max(0, diffDays(TODAY(), (f.entrada || TODAY()).slice(0, 10)));
   const urlF = id => location.origin + location.pathname + '#f=' + id;
-  const fotoF = p => /^https?:/.test(p) ? p : S.db.storage.from('fichas').getPublicUrl(p).data.publicUrl;
+  // fotos privadas: links temporários pedidos ao servidor e guardados por 1 hora
+  const URLS = new Map(), PEND = new Set(); let urlT = null;
+  function fotoF(p) {
+    if (!p || /^https?:|^data:/.test(p)) return p || ''; const c = URLS.get(p); if (c && c.exp > Date.now() + 60000) return c.url;
+    PEND.add(p); clearTimeout(urlT); urlT = setTimeout(pedeUrls, 30); return '';
+  }
+  async function pedeUrls() {
+    const L = [...PEND]; PEND.clear(); if (!L.length || !S.db) return;
+    const { data } = await S.db.storage.from('fichas').createSignedUrls(L, 3600);
+    (data || []).forEach(x => { if (!x.signedUrl) return; URLS.set(x.path, { url: x.signedUrl, exp: Date.now() + 3500e3 }); document.querySelectorAll('[data-foto]').forEach(el => { if (el.dataset.foto !== x.path) return; if (el.tagName === 'IMG') el.src = x.signedUrl; else el.href = x.signedUrl; }); });
+  }
+  async function urlsLongas(paths, seg = 7 * 86400) { const L = (paths || []).filter(p => p && !/^https?:|^data:/.test(p)); if (!L.length) return {}; const { data } = await S.db.storage.from('fichas').createSignedUrls(L, seg); const m = {}; (data || []).forEach(x => { if (x.signedUrl) m[x.path] = x.signedUrl; }); return m; }
+  const imgF = (p, alt, extra = '') => { const u = fotoF(p); return `<img data-foto="${esc(p)}" ${u ? `src="${esc(u)}"` : ''} alt="${esc(alt)}" ${extra}>`; };
 
   /* ---------- catálogo: modelos, grupos e peças ---------- */
   const splitM = s => String(s || '').split(',').map(x => x.trim()).filter(Boolean);
@@ -342,9 +354,14 @@ a.btn.pri{color:#fff}
 
     // fotos
     h += `<div class="panel"><div class="ph"><h2>Fotos</h2><span class="note">${(f.fotos || []).length}</span></div><div class="pb"><div class="of-fotos">
-      ${(f.fotos || []).map((p, i) => `<a href="${esc(fotoF(p))}" target="_blank" rel="noopener"><img src="${esc(fotoF(p))}" alt="Foto ${i + 1}" loading="lazy">${ro ? '' : `<button data-act="ofiFotoDel" data-id="${f.id}" data-i="${i}" aria-label="Apagar foto">${ic('x', 14)}</button>`}</a>`).join('')}
+      ${(f.fotos || []).map((p, i) => `<a data-foto="${esc(p)}" href="${esc(fotoF(p) || '#')}" target="_blank" rel="noopener">${imgF(p, 'Foto ' + (i + 1), 'loading="lazy"')}${ro ? '' : `<button data-act="ofiFotoDel" data-id="${f.id}" data-i="${i}" aria-label="Apagar foto">${ic('x', 14)}</button>`}</a>`).join('')}
       ${ro ? '' : `<label>${ic('cam', 26)}<span>Tirar foto</span><input type="file" accept="image/*" capture="environment" data-ofifoto="${f.id}" hidden></label><label>${ic('plus', 22)}<span>Da galeria</span><input type="file" accept="image/*" multiple data-ofifoto="${f.id}" hidden></label>`}
     </div></div></div>`;
+
+    // assinatura do cliente
+    h += `<div class="panel"><div class="ph"><h2>Assinatura do cliente</h2>${f.assinadoEm ? `<span class="note">${fD(f.assinadoEm)}</span>` : ''}</div><div class="pb">
+      ${f.assinatura ? `<div style="border:1px solid var(--line);border-radius:10px;background:#fff;max-width:420px">${imgF(f.assinatura, 'Assinatura', 'style="display:block;width:100%;height:auto"')}</div><p class="note" style="margin:6px 0 10px">${esc(f.assinadoNome || '')}</p>` : '<p class="note" style="margin:0 0 10px">Ainda não assinada. Peça ao cliente para assinar no ecrã quando levantar o material ou no fim da assistência.</p>'}
+      ${ro ? '' : `<button class="btn ${f.assinatura ? '' : 'pri'}" data-act="ofiAss" data-id="${f.id}">${ic('edit', 16)}${f.assinatura ? 'Assinar de novo' : 'Recolher assinatura'}</button>`}</div></div>`;
 
     // diagnóstico e trabalho
     h += `<div class="panel"><div class="ph"><h2>Diagnóstico e trabalho feito</h2></div><div class="pb"><div class="fg">
@@ -543,6 +560,34 @@ a.btn.pri{color:#fff}
     }, err => { b.disabled = false; toast(err.code === 1 ? 'Sem autorização para a localização. Escreva os km à mão.' : 'Não foi possível obter a localização'); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 });
   };
 
+  ACT.ofiAss = d => {
+    const f = fx(d.id); if (!f) return; const e = ent(f.entidade) || {}, l = loc(f);
+    openSheet(`<div class="sh"><h2>Assinatura do cliente · ${esc(cod(f))}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
+      <p class="note" style="margin-top:0">${esc(nomeEq(f))}. O cliente assina com o dedo no quadro.</p>
+      <canvas id="asscv" style="width:100%;height:220px;border:1.5px dashed var(--line);border-radius:12px;background:#fff;touch-action:none;display:block"></canvas>
+      <div class="fld" style="margin-top:12px"><label for="assnm">Nome de quem assina</label><input id="assnm" value="${esc(f.assinadoNome || l?.contacto || e.contacto || '')}" autocomplete="off"></div></div>
+      <div class="sf"><button class="btn" data-act="ofiAssLimpa">Limpar</button><span class="grow"></span><button class="btn pri" data-act="ofiAssOk" data-id="${f.id}" data-c="${d.c || ''}">Guardar assinatura</button></div>`);
+    setTimeout(() => {
+      const cv = $('#asscv'); if (!cv) return; const r = cv.getBoundingClientRect(), k = window.devicePixelRatio || 1;
+      cv.width = r.width * k; cv.height = r.height * k; const ctx = cv.getContext('2d'); ctx.scale(k, k); ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111';
+      let on = false; cv._vazio = true;
+      const pt = ev => { const b = cv.getBoundingClientRect(); return [ev.clientX - b.left, ev.clientY - b.top]; };
+      cv.onpointerdown = ev => { on = true; cv.setPointerCapture(ev.pointerId); const [x, y] = pt(ev); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + .1, y + .1); ctx.stroke(); cv._vazio = false; };
+      cv.onpointermove = ev => { if (!on) return; const [x, y] = pt(ev); ctx.lineTo(x, y); ctx.stroke(); };
+      cv.onpointerup = cv.onpointercancel = () => { on = false; };
+    }, 60);
+  };
+  ACT.ofiAssLimpa = () => { const cv = $('#asscv'); if (!cv) return; cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); cv._vazio = true; };
+  ACT.ofiAssOk = async (d, b) => {
+    const f = fx(d.id), cv = $('#asscv'); if (!f || !cv || !canAct()) return; if (cv._vazio) return toast('Falta a assinatura');
+    const nome = ($('#assnm')?.value || '').trim(); if (!nome) return toast('Escreva o nome de quem assina');
+    b.disabled = true; const blob = await new Promise(ok => cv.toBlob(ok, 'image/png')); const path = `${f.id}/assinatura-${Date.now()}.png`;
+    const { error } = await S.db.storage.from('fichas').upload(path, blob, { contentType: 'image/png' });
+    if (error) { b.disabled = false; console.warn(error); return toast('Não foi possível guardar a assinatura'); }
+    const old = f.assinatura; await patch('fichas', f.id, { assinatura: path, assinadoNome: nome, assinadoEm: new Date().toISOString() });
+    if (old) S.db.storage.from('fichas').remove([old]);
+    closeSheet(); toast('Assinatura guardada'); if (d.c === 'guia') setTimeout(() => ACT.ofiDocMenu({ id: f.id, c: 'entrega' }), 150);
+  };
   ACT.ofiTMan = async d => {
     const f = fx(d.id); if (!f || !canAct()) return; const h = parseInt($('#ofmh')?.value, 10) || 0, m = parseInt($('#ofmm')?.value, 10) || 0, min = h * 60 + m;
     if (min <= 0) return toast('Escreva as horas ou os minutos'); if (min > 24 * 60) return toast('Mais de 24 h numa linha? Confirme o tempo.');
@@ -686,9 +731,9 @@ a.btn.pri{color:#fff}
     const e = ent(f.entidade) || {};
     return { assunto: `${f.tipo === 'oficina' ? 'Pronto para levantar' : 'Assistência concluída'} · ficha ${cod(f)} · ${prop(f)}`, texto: `Olá${e.contacto ? ' ' + e.contacto : ''},\n\nInformamos que o trabalho da ficha ${cod(f)} (${nomeEq(f)}${f.nSerie ? ', n.º de série ' + f.nSerie : ''}) de ${prop(f)} está pronto${f.tipo === 'oficina' ? ' e pode ser levantado nas nossas instalações' : ''}. A fatura terá a referência ${cod(f)}.${f.trabalho ? '\n\nTrabalho realizado:\n' + f.trabalho : ''}\n\nObrigado pela preferência.${assinOf()}` };
   }
-  function msgRelatorio(f) {
+  function msgRelatorio(f, links = {}) {
     const e = ent(f.entidade) || {}, v = valores(f), P0 = f.pecas || [];
-    const t = [`Relatório de assistência · ficha ${cod(f)}`, '', `Cliente: ${e.nome || ''}`, ondeTxt(f) ? `Local: ${ondeTxt(f)}` : '', `Data: ${fDY(f.chegadaEm || TODAY())}`, `Equipamento: ${nomeEq(f)}${f.nSerie ? ' · n.º de série ' + f.nSerie : ''}`, f.resp ? `Técnico: ${nameOf(f.resp)}` : '', f.chegadaEm ? `Chegada: ${fD(f.chegadaEm)}` : '', `Tempo de trabalho: ${fmtMin(v.min)}${v.fmin && v.fmin !== Math.round(v.min) ? ` (a faturar: ${fmtMin(v.fmin)})` : ''}`, f.km != null ? `Deslocação: ${fmtKm(f.km)} km` : '', f.avaria ? `\nPedido: ${f.avaria}` : '', f.trabalho ? `\nTrabalho realizado:\n${f.trabalho}` : '', P0.length ? `\nPeças aplicadas:\n${P0.map(p => `- ${p.qt} × ${p.nome}${p.ref ? ' (' + p.ref + ')' : ''}`).join('\n')}` : '', (f.fotos || []).length ? `\nFotos: ${(f.fotos || []).map(fotoF).join('\n')}` : ''].filter(x => x !== '').join('\n');
+    const t = [`Relatório de assistência · ficha ${cod(f)}`, '', `Cliente: ${e.nome || ''}`, ondeTxt(f) ? `Local: ${ondeTxt(f)}` : '', `Data: ${fDY(f.chegadaEm || TODAY())}`, `Equipamento: ${nomeEq(f)}${f.nSerie ? ' · n.º de série ' + f.nSerie : ''}`, f.resp ? `Técnico: ${nameOf(f.resp)}` : '', f.chegadaEm ? `Chegada: ${fD(f.chegadaEm)}` : '', `Tempo de trabalho: ${fmtMin(v.min)}${v.fmin && v.fmin !== Math.round(v.min) ? ` (a faturar: ${fmtMin(v.fmin)})` : ''}`, f.km != null ? `Deslocação: ${fmtKm(f.km)} km` : '', f.avaria ? `\nPedido: ${f.avaria}` : '', f.trabalho ? `\nTrabalho realizado:\n${f.trabalho}` : '', P0.length ? `\nPeças aplicadas:\n${P0.map(p => `- ${p.qt} × ${p.nome}${p.ref ? ' (' + p.ref + ')' : ''}`).join('\n')}` : '', (f.fotos || []).length ? `\nFotos: ${(f.fotos || []).map(p => links[p]).filter(Boolean).join('\n')}` : ''].filter(x => x !== '').join('\n');
     return { assunto: `Relatório de assistência · ficha ${cod(f)} · ${e.nome || ''}`, texto: t + `\n\nObrigado.${assinOf()}` };
   }
   function msgOrc(f) {
@@ -703,7 +748,7 @@ a.btn.pri{color:#fff}
       <p class="note" style="margin-top:0">${esc(nota)}</p><pre style="white-space:pre-wrap;font:inherit;background:var(--surface-2);border-radius:10px;padding:12px;margin:0">${esc(m.texto)}</pre></div>
       <div class="sf"><span class="grow"></span><a class="btn ${em ? '' : 'off'}" ${em ? '' : 'style="opacity:.45;pointer-events:none"'} data-act="mailgo" data-ofmark="${marca}" data-id="${f.id}" href="${esc(mail)}">${ic('mail', 16)}Email${em ? '' : ' (sem email)'}</a><a class="btn pri" ${e.telemovel ? '' : 'style="opacity:.45;pointer-events:none"'} data-act="mailgo" data-ofmark="${marca}" data-id="${f.id}" href="${esc(wa)}" target="_blank" rel="noopener">${ic('wa', 16)}WhatsApp${e.telemovel ? '' : ' (sem telemóvel)'}</a></div>`);
   }
-  ACT.ofiAviso = d => { const f = fx(d.id); if (!f) return; const rel = fora(f); enviarSheet(f, rel ? msgRelatorio(f) : msgPronto(f), rel ? 'Relatório ao cliente' : 'Avisar o cliente', 'Abre o email ou o WhatsApp com a mensagem já escrita. Reveja e carregue em enviar.', 'aviso'); };
+  ACT.ofiAviso = async d => { const f = fx(d.id); if (!f) return; const rel = fora(f), links = rel ? await urlsLongas(f.fotos) : {}; enviarSheet(f, rel ? msgRelatorio(f, links) : msgPronto(f), rel ? 'Relatório ao cliente' : 'Avisar o cliente', 'Abre o email ou o WhatsApp com a mensagem já escrita. Reveja e carregue em enviar.', 'aviso'); };
   ACT.ofiOrc = d => { const f = fx(d.id); if (!f) return; enviarSheet(f, msgOrc(f), 'Enviar orçamento', 'Fica registado na ficha e no cliente quando carregar num dos botões.', 'orc'); };
   ACT.ofiOrcE = async d => { const f = fx(d.id); if (!f) return; const p = { orcEstado: d.c }; if (d.c === 'aceite' && f.estado === 'orcamento') p.estado = 'reparacao'; await patch('fichas', f.id, p); toast(d.c === 'aceite' ? 'Orçamento aceite' : 'Orçamento recusado'); };
   // os links do email/WhatsApp não passam pelo ACT: regista aqui o envio
@@ -760,7 +805,7 @@ a.btn.pri{color:#fff}
     openSheet(`<div class="sh"><h2>${titulo}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
       <p class="note" style="margin-top:0">${tipo === 'entrada' ? 'Entregue ao cliente quando deixa o material. Leva a referência que depois aparece na fatura.' : 'O cliente leva isto quando levanta: diz o que foi feito e que peças levou. A fatura segue depois com a mesma referência.'}</p>
       <pre style="white-space:pre-wrap;font:inherit;background:var(--surface-2);border-radius:10px;padding:12px;margin:0">${esc(m.texto)}</pre></div>
-      <div class="sf"><button class="btn" data-act="ofiDoc" data-id="${f.id}" data-c="${tipo}">${ic('print', 16)}Imprimir</button><span class="grow"></span>
+      <div class="sf">${tipo !== 'entrada' && S.canWrite ? `<button class="btn ${f.assinatura ? '' : 'pri'}" data-act="ofiAss" data-id="${f.id}" data-c="guia">${ic('edit', 16)}${f.assinatura ? 'Assinado ✓' : 'Assinatura do cliente'}</button>` : ''}<button class="btn" data-act="ofiDoc" data-id="${f.id}" data-c="${tipo}">${ic('print', 16)}Imprimir</button><span class="grow"></span>
       <a class="btn" ${em ? '' : 'style="opacity:.45;pointer-events:none"'} data-act="mailgo" data-ofmark="doc-${tipo}" data-id="${f.id}" href="${esc(`mailto:${em}?subject=${encodeURIComponent(m.assunto)}&body=${encodeURIComponent(m.texto)}`)}">${ic('mail', 16)}Email</a>
       <a class="btn pri" ${e.telemovel ? '' : 'style="opacity:.45;pointer-events:none"'} data-act="mailgo" data-ofmark="doc-${tipo}" data-id="${f.id}" href="${esc(`https://wa.me/${waNum(e.telemovel)}?text=${encodeURIComponent(m.texto)}`)}" target="_blank" rel="noopener">${ic('wa', 16)}WhatsApp</a></div>`);
   };
@@ -769,6 +814,7 @@ a.btn.pri{color:#fff}
     let qr = ''; try { await loadQR(); const q = qrcode(0, 'M'); q.addData(urlF(f.id)); q.make(); qr = q.createSvgTag({ cellSize: 3, margin: 0, scalable: true }); } catch (_) { }
     const titulo = tipo === 'entrada' ? 'Comprovativo de entrada' : (f.tipo === 'oficina' ? 'Guia de entrega' : 'Folha de serviço'), P0 = f.pecas || [];
     let logo = new URL('logo.png', location.href).href; try { const bl = await (await fetch(logo)).blob(); logo = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(bl); }); } catch (_) { }
+    const assUrl = f.assinatura ? (await urlsLongas([f.assinatura], 3600))[f.assinatura] : '';
     const assin = tipo === 'entrada' ? ['Entregue pelo cliente', 'Recebido por ' + esc(cfg().empresa)] : ['Entregue por ' + esc(cfg().empresa), 'Recebido pelo cliente'];
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${titulo} ${esc(cod(f))}</title><style>
       @page{size:A4;margin:16mm}body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:11pt;margin:0}
@@ -777,7 +823,7 @@ a.btn.pri{color:#fff}
       h1{font-size:15pt;margin:18px 0 10px}.qr{width:26mm;height:26mm;margin-top:6px;margin-left:auto}.qr svg{width:100%;height:100%}
       table{width:100%;border-collapse:collapse}td{padding:6px 4px;border-bottom:1px solid #ddd;vertical-align:top}td:first-child{width:34%;color:#555}
       td.pre{white-space:pre-wrap}h2{font-size:12pt;margin:18px 0 6px}.nota{margin-top:18px;padding:10px 12px;background:#EEF4FB;border-left:4px solid #0090E0;font-size:10.5pt}
-      .ass{display:flex;gap:30px;margin-top:46px}.ass div{flex:1;border-top:1px solid #333;padding-top:6px;font-size:9.5pt;color:#444}
+      .ass2{display:flex;gap:30px;margin-top:22px}.ass2>div{flex:1}.ass2 .sg{height:64px;display:flex;align-items:flex-end}.ass2 .sg img{max-height:62px;max-width:100%}.ass2 .ln{border-top:1px solid #333;padding-top:6px;font-size:9.5pt;color:#444}.ass{display:flex;gap:30px;margin-top:46px}.ass div{flex:1;border-top:1px solid #333;padding-top:6px;font-size:9.5pt;color:#444}
       @media screen{body{background:#eee}.pg{background:#fff;max-width:190mm;margin:20px auto;padding:16mm;box-shadow:0 1px 6px rgba(0,0,0,.2)}.b{text-align:center;margin:10px}}@media print{.b{display:none}}</style></head><body>
       <div class="b"><button onclick="print()">Imprimir</button></div><div class="pg">
       <div class="top"><img src="${esc(logo)}" alt=""><div class="ref"><span>Referência</span><b>${esc(cod(f))}</b>${qr ? `<div class="qr">${qr}</div>` : ''}</div></div>
@@ -785,7 +831,7 @@ a.btn.pri{color:#fff}
       <table>${linhasDoc(f, tipo).map(([a, b]) => `<tr><td>${esc(a)}</td><td class="pre">${esc(b)}</td></tr>`).join('')}</table>
       ${tipo !== 'entrada' && P0.length ? `<h2>Peças aplicadas</h2><table>${P0.map(p => `<tr><td>${esc(p.ref || '')}</td><td>${esc(p.nome)} · ${esc(String(p.qt).replace('.', ','))} un</td></tr>`).join('')}</table>` : ''}
       <div class="nota">${esc(nota(f))}${tipo !== 'entrada' ? ' A fatura segue depois.' : ''}</div>
-      <div class="ass"><div>${assin[0]}</div><div>${assin[1]}</div></div></div>
+      <div class="ass2"><div><div class="sg"></div><div class="ln">${assin[0]}</div></div><div><div class="sg">${tipo !== 'entrada' && assUrl ? `<img src="${esc(assUrl)}" alt="Assinatura">` : ''}</div><div class="ln">${assin[1]}${tipo !== 'entrada' && f.assinadoNome ? ' · ' + esc(f.assinadoNome) + (f.assinadoEm ? ' · ' + esc(fD(f.assinadoEm)) : '') : ''}</div></div></div></div>
       <script>window.onload=()=>setTimeout(()=>print(),300)<\/script></body></html>`);
     w.document.close();
     patch('fichas', f.id, tipo === 'entrada' ? { entradaDocEm: new Date().toISOString() } : { entregaDocEm: new Date().toISOString() });
@@ -795,7 +841,7 @@ a.btn.pri{color:#fff}
   /* ---------- PDF das fichas (com preços só para o administrador) ---------- */
   function pagFicha(f, precos, logo) {
     const e = ent(f.entidade) || {}, v = valores(f), P0 = f.pecas || [], tipoT = f.tipo === 'oficina' ? 'Ficha de reparação' : f.tipo === 'guarda' ? 'Ficha de guarda' : f.tipo === 'manutencao' ? 'Ficha de manutenção' : 'Ficha de assistência';
-    const L = linhasDoc(f, 'entrega').filter(([a]) => a !== 'Referência');
+    const L = linhasDoc(f, 'entrega').filter(([a]) => a !== 'Referência'); if (f.assinadoEm) L.push(['Assinado pelo cliente', (f.assinadoNome || '') + ' · ' + fD(f.assinadoEm)]);
     const T = tempos(f).filter(t => t.fim).sort((a, b) => (a.inicio || '').localeCompare(b.inicio || ''));
     return `<section class="pg"><div class="top"><img src="${esc(logo)}" alt=""><div class="ref"><span>${tipoT}</span><b>${esc(cod(f))}</b><span>${esc(estL(f))}${f.faturado ? ' · faturada' : ''}</span></div></div>
       <table>${L.map(([a, b]) => `<tr><td>${esc(a)}</td><td class="pre">${esc(b)}</td></tr>`).join('')}${f.diagnostico ? `<tr><td>Diagnóstico</td><td class="pre">${esc(f.diagnostico)}</td></tr>` : ''}</table>
@@ -803,8 +849,9 @@ a.btn.pri{color:#fff}
       ${P0.length ? `<h2>Peças aplicadas</h2><table><tr class="h"><td>Código</td><td>Peça</td><td class="r">Qt</td>${precos ? '<td class="r">Preço</td><td class="r">Total</td>' : ''}</tr>${P0.map(p => `<tr><td>${esc(p.ref || '')}</td><td>${esc(p.nome)}</td><td class="r">${esc(String(p.qt).replace('.', ','))}</td>${precos ? `<td class="r">${eur(p.preco)}</td><td class="r">${eur((+p.qt || 0) * (+p.preco || 0))}</td>` : ''}</tr>`).join('')}</table>` : ''}
       ${precos ? `<h2>Valores (sem IVA)</h2><table><tr><td>Mão de obra · ${esc(fmtMin(v.fmin))} × ${eur(precoH(f))}/h</td><td class="r">${eur(v.mo)}</td></tr>${fora(f) ? `<tr><td>Deslocação${v.desl ? ' · ' + esc(v.desl.txt) : ''}</td><td class="r">${eur(v.desl?.valor || 0)}</td></tr>` : ''}<tr><td>Peças</td><td class="r">${eur(v.pc)}</td></tr><tr><td><b>Total sem IVA</b></td><td class="r"><b>${eur(v.total)}</b></td></tr></table>` : ''}
       <div class="nota">${esc(nota(f))}</div>
-      ${precos ? '' : '<div class="ass"><div>Técnico</div><div>Cliente</div></div>'}</section>`;
+      ${precos ? '' : `<div class="ass2"><div><div class="sg"></div><div class="ln">Técnico${f.tecnico ? ' · ' + esc(tecNome(f.tecnico)) : ''}</div></div><div><div class="sg">${ASS[f.assinatura] ? `<img src="${esc(ASS[f.assinatura])}" alt="Assinatura">` : ''}</div><div class="ln">Cliente${f.assinadoNome ? ' · ' + esc(f.assinadoNome) : ''}</div></div></div>`}</section>`;
   }
+  let ASS = {};
   async function abrirPdf(L, precos, titulo) {
     if (precos && !S.verValores) precos = false;
     const w = window.open('', '_blank'); if (!w) return toast('O navegador bloqueou a janela. Permita janelas para este site.');
@@ -816,10 +863,10 @@ a.btn.pri{color:#fff}
       .ref{text-align:right}.ref b{display:block;font-size:18pt;color:#2F4F94}.ref span{display:block;font-size:9pt;color:#555}
       table{width:100%;border-collapse:collapse}td{padding:5px 4px;border-bottom:1px solid #ddd;vertical-align:top}td:first-child{color:#555;width:32%}tr.h td{font-weight:700;color:#111;border-bottom:1.5px solid #999}
       td.pre{white-space:pre-wrap}.r{text-align:right;white-space:nowrap}h2{font-size:11.5pt;margin:14px 0 4px}
-      .nota{margin-top:14px;padding:8px 10px;background:#EEF4FB;border-left:4px solid #0090E0;font-size:9.5pt}.ass{display:flex;gap:30px;margin-top:40px}.ass div{flex:1;border-top:1px solid #333;padding-top:6px;font-size:9pt;color:#444}
+      .nota{margin-top:14px;padding:8px 10px;background:#EEF4FB;border-left:4px solid #0090E0;font-size:9.5pt}.ass2{display:flex;gap:30px;margin-top:22px}.ass2>div{flex:1}.ass2 .sg{height:64px;display:flex;align-items:flex-end}.ass2 .sg img{max-height:62px;max-width:100%}.ass2 .ln{border-top:1px solid #333;padding-top:6px;font-size:9.5pt;color:#444}.ass{display:flex;gap:30px;margin-top:40px}.ass div{flex:1;border-top:1px solid #333;padding-top:6px;font-size:9pt;color:#444}
       @media screen{body{background:#eee}.pg{background:#fff;max-width:190mm;margin:16px auto;padding:14mm;box-shadow:0 1px 6px rgba(0,0,0,.2)}.b{text-align:center;margin:10px;font:14px Arial}}@media print{.b{display:none}}</style></head><body>
       <div class="b">${L.length} ficha${L.length > 1 ? 's' : ''} · ${precos ? 'com preços (uso interno)' : 'sem preços'} · <button onclick="print()">Guardar em PDF / Imprimir</button></div>
-      ${L.map(f => pagFicha(f, precos, logo)).join('')}
+      ${(ASS = await urlsLongas(L.map(f => f.assinatura), 3600), L.map(f => pagFicha(f, precos, logo)).join(''))}
       <script>window.onload=()=>setTimeout(()=>print(),300)<\/script></body></html>`);
     w.document.close();
   }

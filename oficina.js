@@ -23,13 +23,14 @@ window.OFI_INIT = function () {
     ['ativos', 'Ativos e guarda de máquinas', 'O que cada cliente tem na empresa e máquinas só guardadas'],
     ['stock', 'Stock de peças', 'Baixa automática pelas fichas, stock mínimo e lista de encomenda'],
     ['garantias', 'Máquinas e garantias', 'Histórico por n.º de série, garantia e aviso de retrabalho'],
+    ['armazenamento', 'Taxa de armazenamento', 'Cobrança do espaço ocupado pelo que fica na empresa'],
     ['link', 'Link do cliente', 'O cliente acompanha a reparação e aceita o orçamento'],
     ['planeamento', 'Planear trabalho', 'Lotes, tempos médios, kits e peças a preparar'],
     ['rendimento', 'Rendimento dos técnicos', 'Faturação por técnico e tempos'],
     ['croquis', 'Croquis das peças', 'Desenhos do catálogo com os números clicáveis'],
     ['sage', 'Integração Sage', 'Ficheiro para faturar no Sage', 'integra'],
     ['avisos', 'Avisos automáticos', 'Email e WhatsApp enviados pelo servidor', 'integra']];
-  const PLANOS = { base: ['Base', []], profissional: ['Profissional', ['fora', 'ativos', 'stock', 'garantias', 'link']], empresa: ['Empresa', MODS.map(m => m[0])] };
+  const PLANOS = { base: ['Base', []], profissional: ['Profissional', ['fora', 'ativos', 'armazenamento', 'stock', 'garantias', 'link']], empresa: ['Empresa', MODS.map(m => m[0])] };
   const temMod = k => (cfg().modulos || {})[k] !== false;
   const VMOD = { rotaof: 'fora', ativos: 'ativos', encomendarp: 'stock', stock: 'stock', equip: 'garantias', equipum: 'garantias', planear: 'planeamento', tempos: 'planeamento', tecnicosof: 'rendimento' };
   SO_VALORES.push('modulos');
@@ -98,12 +99,23 @@ window.OFI_INIT = function () {
     if (min <= 0 && !(fora(f) && f.chegadaEm)) return 0;
     return Math.max(mn, Math.ceil(Math.max(0, Math.round(min) - tol) / bl) * bl);
   }
+  // taxa de armazenamento: conta depois dos dias grátis (desde «pronto», ou desde a entrada nas máquinas só guardadas) e nunca antes da data de início
+  const addD = (d, n) => { const x = new Date(d.slice(0, 10) + 'T12:00'); x.setDate(x.getDate() + n); return iso(x); };
+  const difD = (a, b) => Math.round((new Date(b + 'T12:00') - new Date(a + 'T12:00')) / 864e5);
+  function armCalc(f) {
+    const c = cfg(); if (!temMod('armazenamento') || !c.armModo || c.armModo === 'nao' || !['oficina', 'guarda'].includes(f.tipo) || f.estado === 'cancelado') return null;
+    const base = (f.tipo === 'guarda' ? f.entrada : f.prontoEm || '').slice(0, 10); if (!base) return null;
+    const gratisAte = addD(base, +(c.armGratis ?? 0) || 0), desde = c.armInicio && c.armInicio > gratisAte ? c.armInicio : gratisAte, ate = (f.entregueEm || '').slice(0, 10) || TODAY();
+    const dias = Math.max(0, difD(desde, ate)), un = c.armModo === 'mes' ? Math.ceil(dias / 30) : dias, maq = f.equipamento === 'Máquina completa';
+    const preco = +(maq ? c.armPrecoMaq : c.armPrecoPeca) || 0;
+    return { desde, gratisAte, dias, un, uL: c.armModo === 'mes' ? (un === 1 ? 'mês' : 'meses') : (un === 1 ? 'dia' : 'dias'), preco, valor: un * preco, semPreco: !preco, aContar: TODAY() >= desde };
+  }
   function valores(f) {
     const min = minutos(f), fmin = faturaMin(f, min), mo = fmin / 60 * precoH(f);
     const d = fora(f) && f.km != null ? deslCalc(ent(f.entidade), f.km) : null;
     const pc = (f.pecas || []).reduce((s, p) => s + (+p.qt || 0) * (+p.preco || 0), 0);
-    const total = f.emGarantia ? 0 : mo + (d?.valor || 0) + pc;
-    return { min, fmin, mo, desl: d, pc, total, custoGar: f.emGarantia ? mo + (d?.valor || 0) + pc : 0 };
+    const arm = armCalc(f), total = (f.emGarantia ? 0 : mo + (d?.valor || 0) + pc) + (arm?.valor || 0);
+    return { min, fmin, mo, desl: d, pc, arm, total, custoGar: f.emGarantia ? mo + (d?.valor || 0) + pc : 0 };
   }
 
   /* ---------- distância ---------- */
@@ -420,7 +432,7 @@ a.btn.pri{color:#fff}
         <tr><td>Mão de obra · ${fmtMin(v.fmin)} a faturar (tempo real ${fmtMin(v.min)}${fora(f) ? ', mínimo ' + fmtMin(cfg().minimoForaMin ?? 60) + ' fora' : ', mínimo ' + fmtMin(cfg().minimoOficinaMin ?? 30) + ' na oficina'}) × ${eur(precoH(f))}/h</td><td class="num">${eur(v.mo)}</td></tr>
         ${fora(f) ? `<tr><td>Deslocação${v.desl ? ' · ' + esc(v.desl.txt) : ' · falta a localização ou os km'}</td><td class="num">${eur(v.desl?.valor || 0)}</td></tr>` : ''}
         <tr><td>Peças · ${(f.pecas || []).reduce((s, p) => s + (+p.qt || 0), 0)} un</td><td class="num">${eur(v.pc)}</td></tr>
-        ${f.emGarantia ? `<tr><td>Coberto pela garantia (custo interno ${eur(v.custoGar)})</td><td class="num">− ${eur(v.custoGar)}</td></tr>` : ''}<tr><td><b>Total sem IVA</b></td><td class="num"><b>${eur(v.total)}</b></td></tr></tbody></table>
+        ${v.arm ? `<tr><td>Armazenamento · ${v.arm.aContar ? `${v.arm.un} ${v.arm.uL} desde ${fDY(v.arm.desde)}` : `grátis até ${fDY(v.arm.desde)}`}${v.arm.semPreco ? ' · sem preço definido' : ' × ' + eur(v.arm.preco)}</td><td class="num">${eur(v.arm.valor)}</td></tr>` : ''}${f.emGarantia ? `<tr><td>Coberto pela garantia (custo interno ${eur(v.custoGar)})</td><td class="num">− ${eur(v.custoGar)}</td></tr>` : ''}<tr><td><b>Total sem IVA</b></td><td class="num"><b>${eur(v.total)}</b></td></tr></tbody></table>
         ${ro ? '' : `<label class="tog"><input type="checkbox" data-offat="${f.id}" ${f.faturado ? 'checked' : ''}><span>Já está faturado</span></label>`}</div></div>`;
     }
     return h + `</div>`;
@@ -459,6 +471,12 @@ a.btn.pri{color:#fff}
         <div class="fld"><label for="cf-gar">Garantia de peças e reparações (dias)</label><input id="cf-gar" type="number" step="1" value="${c.garantiaDias ?? 30}"></div>
         <div class="fld"><label for="cf-garn">Garantia de máquinas novas (dias)</label><input id="cf-garn" type="number" step="1" value="${c.garantiaMaqNovaDias ?? 365}"></div>
         <div class="fld"><label for="cf-garu">Garantia de máquinas usadas (dias)</label><input id="cf-garu" type="number" step="1" value="${c.garantiaMaqUsadaDias ?? 180}"></div>
+        <div class="fld" style="grid-column:1/-1"><b>Taxa de armazenamento</b><span class="note" style="display:block">Para o que fica na empresa depois de pronto (ou desde a entrada, nas máquinas só guardadas). Cada empresa define as suas regras.</span></div>
+        <div class="fld"><label for="cf-am">Cobrar</label><select id="cf-am">${[['nao', 'Não cobrar'], ['dia', 'Por dia'], ['mes', 'Por mês (30 dias)']].map(([k, l]) => `<option value="${k}" ${(c.armModo || 'nao') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="fld"><label for="cf-ai">A partir de</label><input id="cf-ai" type="date" value="${esc(c.armInicio || '')}"></div>
+        <div class="fld"><label for="cf-ag">Dias grátis</label><input id="cf-ag" type="number" step="1" value="${c.armGratis ?? 15}"></div>
+        <div class="fld"><label for="cf-apm">Preço máquina completa (€ s/ IVA)</label><input id="cf-apm" type="number" step="0.01" value="${c.armPrecoMaq ?? ''}"></div>
+        <div class="fld"><label for="cf-app">Preço peça (€ s/ IVA)</label><input id="cf-app" type="number" step="0.01" value="${c.armPrecoPeca ?? ''}"></div>
         <div class="fld"><label for="cf-lat">Morada da empresa · latitude</label><input id="cf-lat" type="number" step="any" value="${c.baseLat ?? ''}"></div>
         <div class="fld"><label for="cf-lng">longitude</label><input id="cf-lng" type="number" step="any" value="${c.baseLng ?? ''}"></div></div>
         <label class="tog"><input id="cf-iv" type="checkbox" ${c.idaVolta ? 'checked' : ''}><span>Nos clientes por km, cobrar ida e volta</span></label>
@@ -469,7 +487,7 @@ a.btn.pri{color:#fff}
         ${D('desl_tabelas').map(t => `<div class="fg" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;align-items:end;margin-bottom:10px"><div class="fld"><label>Nome</label><input data-dtn="${t.id}" value="${esc(t.nome)}"></div><div class="fld"><label>Escalões</label><input data-dte="${t.id}" value="${esc(escTxt(t.escaloes))}"></div><button class="btn" data-act="ofTabSave" data-id="${t.id}">Guardar</button></div><p class="note" style="margin:-4px 0 14px">${D('entidades').filter(e => e.deslTabela === t.id).length} clientes usam esta tabela</p>`).join('')}
         ${S.canWrite ? '<button class="btn" data-act="ofTabNew">' + ic('plus', 16) + 'Nova tabela</button>' : ''}</div></div></div>`;
   });
-  ACT.ofCfgSave = async () => { const n = id => { const x = $('#' + id).value; return x === '' ? null : parseFloat(x); }; if (await patch('oficina_config', 1, { precoHora: n('cf-ph'), precoKm: n('cf-pk'), blocoMin: n('cf-bl') || 30, toleranciaMin: n('cf-tol') ?? 5, minimoForaMin: n('cf-mf') ?? 60, minimoOficinaMin: n('cf-mo') ?? 30, garantiaDias: n('cf-gar') || 30, garantiaMaqNovaDias: n('cf-garn') || 365, garantiaMaqUsadaDias: n('cf-garu') || 180, baseLat: n('cf-lat'), baseLng: n('cf-lng'), idaVolta: $('#cf-iv').checked })) toast('Guardado'); };
+  ACT.ofCfgSave = async () => { const n = id => { const x = $('#' + id).value; return x === '' ? null : parseFloat(x); }; if (await patch('oficina_config', 1, { precoHora: n('cf-ph'), precoKm: n('cf-pk'), blocoMin: n('cf-bl') || 30, toleranciaMin: n('cf-tol') ?? 5, minimoForaMin: n('cf-mf') ?? 60, minimoOficinaMin: n('cf-mo') ?? 30, garantiaDias: n('cf-gar') || 30, garantiaMaqNovaDias: n('cf-garn') || 365, garantiaMaqUsadaDias: n('cf-garu') || 180, armModo: $('#cf-am').value, armInicio: $('#cf-ai').value || null, armGratis: n('cf-ag') ?? 0, armPrecoMaq: n('cf-apm'), armPrecoPeca: n('cf-app'), baseLat: n('cf-lat'), baseLng: n('cf-lng'), idaVolta: $('#cf-iv').checked })) toast('Guardado'); };
   ACT.ofTabSave = async d => { const nome = $(`[data-dtn="${d.id}"]`).value.trim(), L = parseEsc($(`[data-dte="${d.id}"]`).value); if (!nome || !L.length) return toast('Falta o nome ou os escalões'); if (await patch('desl_tabelas', d.id, { nome, escaloes: L })) toast('Tabela guardada'); };
   ACT.ofTabNew = async () => { await save('desl_tabelas', null, { nome: 'Nova tabela', escaloes: [{ ate: 40, valor: 30 }, { ate: 70, valor: 50 }, { ate: 150, valor: 90 }] }); };
 
@@ -530,10 +548,10 @@ a.btn.pri{color:#fff}
     C.sort((a, b) => b.L.length - a.L.length || a.nome.localeCompare(b.nome, 'pt'));
     const resumo = L => { const k = new Map(); L.forEach(f => { const n = f.equipamento || 'Outro'; k.set(n, (k.get(n) || 0) + 1); }); return [...k.entries()].map(([n, x]) => `${x} × ${n}`).join(' · '); };
     return `<div class="pg">${roBanner()}
-      <div class="mini"><div><span>Clientes com material cá</span><b>${m.size}</b></div><div><span>Itens na empresa</span><b>${A.length}</b></div><div><span>Em guarda</span><b>${A.filter(f => f.tipo === 'guarda').length}</b></div><div><span>Em reparação / prontos</span><b>${A.filter(f => f.tipo === 'oficina').length}</b></div></div>
+      <div class="mini"><div><span>Clientes com material cá</span><b>${m.size}</b></div>${S.verValores && temMod('armazenamento') && A.some(f => armCalc(f)?.valor) ? `<div><span>Armazenamento acumulado</span><b>${eur(A.reduce((s, f) => s + (armCalc(f)?.valor || 0), 0))}</b></div>` : ''}<div><span>Itens na empresa</span><b>${A.length}</b></div><div><span>Em guarda</span><b>${A.filter(f => f.tipo === 'guarda').length}</b></div><div><span>Em reparação / prontos</span><b>${A.filter(f => f.tipo === 'oficina').length}</b></div></div>
       <div class="tb"><div class="tbr"><label class="srch">${ic('search', 18)}<input id="q-ativos" data-q="ativos" type="search" placeholder="Cliente, equipamento, código ou n.º de série" value="${esc(S.q.ativos || '')}" autocomplete="off"></label>${S.canWrite ? `<button class="btn" data-act="ofiNew" data-preset='{"tipo":"guarda","equipamento":"Máquina completa"}'>${ic('box', 18)}<span>Guardar máquina</span></button>` : ''}</div></div>
-      <p class="note" style="margin:0">Só aparecem clientes com alguma coisa na empresa (em reparação, pronta por levantar ou em guarda). Os dias contam desde a entrada, para a futura taxa de espaço.</p>
-      ${C.length ? C.map(c => `<div class="panel"><div class="ph"><h2><a href="#" data-act="ofiCli" data-id="${c.id}" style="color:inherit;text-decoration:none">${esc(c.nome)}</a></h2><span class="note">${esc(resumo(c.L))}</span></div>${c.L.map(f => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero ?? "•"}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}</span><span class="r2">${esc([cod(f), f.nSerie ? 'S/N ' + f.nSerie : '', 'entrou ' + fDY(f.entrada)].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(estL(f), EST_T[f.estado])}<span class="note" style="${dias(f) > 90 ? 'color:var(--bad);font-weight:500' : ''}">${dias(f)} d</span></span></div>`).join('')}</div>`).join('') : '<div class="panel empty"><b>Nenhum cliente tem material na empresa</b></div>'}
+      <p class="note" style="margin:0">Só aparecem clientes com alguma coisa na empresa (em reparação, pronta por levantar ou em guarda). ${temMod('armazenamento') && cfg().armModo && cfg().armModo !== 'nao' ? `Taxa de armazenamento ${cfg().armModo === 'mes' ? 'ao mês' : 'ao dia'}${cfg().armInicio ? ' a partir de ' + fDY(cfg().armInicio) : ''}, depois de ${cfg().armGratis ?? 0} dias grátis.` : 'Os dias contam desde a entrada.'}</p>
+      ${C.length ? C.map(c => `<div class="panel"><div class="ph"><h2><a href="#" data-act="ofiCli" data-id="${c.id}" style="color:inherit;text-decoration:none">${esc(c.nome)}</a></h2><span class="note">${esc(resumo(c.L))}</span></div>${c.L.map(f => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero ?? "•"}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}</span><span class="r2">${esc([cod(f), f.nSerie ? 'S/N ' + f.nSerie : '', 'entrou ' + fDY(f.entrada)].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(estL(f), EST_T[f.estado])}<span class="note" style="${dias(f) > 90 ? 'color:var(--bad);font-weight:500' : ''}">${dias(f)} d</span>${(() => { const r = armCalc(f); return !r ? '' : r.aContar ? `<span class="note" style="color:#B45309">taxa ${r.un} ${r.uL}${S.verValores && !r.semPreco ? ' · ' + eur(r.valor) : ''}</span>` : `<span class="note">grátis até ${fDY(r.desde)}</span>`; })()}</span></div>`).join('')}</div>`).join('') : '<div class="panel empty"><b>Nenhum cliente tem material na empresa</b></div>'}
     </div>`;
   });
   ACT.ofiCli = d => go('ficha', { id: d.id });
@@ -961,13 +979,14 @@ a.btn.pri{color:#fff}
     const c = v => { v = String(v ?? ''); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }, n = x => (Math.round((+x || 0) * 100) / 100).toString().replace('.', ',');
     const rows = [['Ficha (referência na fatura)', 'Data', 'Cliente', 'NIF', 'Referência', 'Descrição', 'Quantidade', 'Preço unitário s/ IVA', 'IVA %', 'Total s/ IVA']];
     L.forEach(f => {
-      if (f.emGarantia) return;
       const e = ent(f.entidade) || {}, v = valores(f), dt = (f.entregueEm || f.prontoEm || f.entrada || '').slice(0, 10), base = [cod(f), dt, e.nome || '', e.nif || ''];
       const desc = `Ficha ${cod(f)} · ${nomeEq(f)}${f.nSerie ? ' S/N ' + f.nSerie : ''}`;
-      if (v.fmin > 0) rows.push([...base, 'MO', 'Mão de obra · ' + desc, n(v.fmin / 60), n(precoH(f)), 23, n(v.mo)]);
-      if (v.desl) rows.push([...base, 'DESL', 'Deslocação · ' + v.desl.txt, 1, n(v.desl.valor), 23, n(v.desl.valor)]);
-      (f.pecas || []).forEach(p => rows.push([...base, p.ref || '', p.nome, n(p.qt), n(p.preco), 23, n(p.qt * p.preco)]));
-      if (f.orcValor != null && f.orcEstado === 'aceite' && !v.min && !(f.pecas || []).length) rows.push([...base, 'ORC', 'Reparação conforme orçamento · ' + desc, 1, n(f.orcValor), 23, n(f.orcValor)]);
+      const g = f.emGarantia;
+      if (!g && v.fmin > 0) rows.push([...base, 'MO', 'Mão de obra · ' + desc, n(v.fmin / 60), n(precoH(f)), 23, n(v.mo)]);
+      if (v.arm?.valor) rows.push([...base, 'ARM', `Armazenamento · ${v.arm.un} ${v.arm.uL} desde ${fDY(v.arm.desde)}`, n(v.arm.un), n(v.arm.preco), 23, n(v.arm.valor)]);
+      if (!g && v.desl) rows.push([...base, 'DESL', 'Deslocação · ' + v.desl.txt, 1, n(v.desl.valor), 23, n(v.desl.valor)]);
+      if (!g) (f.pecas || []).forEach(p => rows.push([...base, p.ref || '', p.nome, n(p.qt), n(p.preco), 23, n(p.qt * p.preco)]));
+      if (!g && f.orcValor != null && f.orcEstado === 'aceite' && !v.min && !(f.pecas || []).length) rows.push([...base, 'ORC', 'Reparação conforme orçamento · ' + desc, 1, n(f.orcValor), 23, n(f.orcValor)]);
     });
     const blob = new Blob(['﻿' + rows.map(r => r.map(c).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `faturar-${TODAY()}.csv`; document.body.appendChild(a); a.click(); a.remove();

@@ -320,6 +320,7 @@ a.btn.pri{color:#fff}
     <div class="fh"><span class="of-n" style="min-width:56px;height:56px;font-size:20px">${f.numero ?? "•"}</span><div style="min-width:0;flex:1"><h1>${esc(L0 ? L0.nome : prop(f))}</h1>
       <div class="meta">${badge(cod(f), 'info')}${badge(estL(f), EST_T[f.estado])}${badge(TIPO_C[f.tipo], 'gold')}${(L0 || (f.proprietario && f.proprietario !== e.nome)) && e.nome ? badge('Cliente: ' + e.nome) : ''}${['oficina', 'guarda'].includes(f.tipo) ? badge(`Entrou a ${fDY(f.entrada)} · ${dias(f)} d`, dias(f) > 30 && ABERTOS.includes(f.estado) ? 'bad' : 'mute') : f.prevista ? badge('Agendada ' + fDY(f.prevista)) : ''}${f.faturado ? badge('Faturado', 'ok') : ''}${fechada(f) && garantiaAte(f) >= TODAY() ? badge('Garantia até ' + fDY(garantiaAte(f)), 'ok') : ''}${f.emGarantia ? badge('Em garantia', 'ok') : ''}</div></div></div>
     ${avisoGarantia(f)}
+    ${f.tipo !== 'guarda' ? `<div class="of-row2" style="flex-wrap:wrap;gap:6px"><span class="note">Garantia desta ficha:</span>${S.canWrite ? Object.entries(GAR).map(([k, l]) => `<button class="chipb ${(f.garantiaTipo || 'pecas') === k ? 'on' : ''}" data-act="ofiGarT" data-id="${f.id}" data-c="${k}">${l}${k === 'sem' ? '' : ' · ' + durL(gDias({ garantiaTipo: k }))}</button>`).join('') : `<b>${GAR[f.garantiaTipo || 'pecas']}${f.garantiaTipo === 'sem' ? '' : ' · ' + durL(gDias(f))}</b>`}</div>` : ''}
     ${nsN(f.nSerie) && D('fichas').filter(x => nsN(x.nSerie) === nsN(f.nSerie)).length > 1 ? `<div><button class="btn sm" data-act="ofiEquip" data-c="${esc(nsN(f.nSerie))}">${ic('clock', 16)}Histórico desta máquina (${D('fichas').filter(x => nsN(x.nSerie) === nsN(f.nSerie)).length} intervenções)</button></div>` : ''}
     <div class="panel"><div class="pb" style="padding-top:12px"><div class="kv">${[['Equipamento', nomeEq(f)], ['N.º de série', f.nSerie], ['Grupo', f.grupo], ['Avaria / pedido', f.avaria], ['Técnico', f.tecnico ? tecNome(f.tecnico) : (f.resp ? nameOf(f.resp) : '')], ['Notas', f.notas]].filter(x => x[1]).map(([l, x]) => `<div class="kvi"><span>${l}</span><b style="white-space:pre-wrap">${esc(x)}</b></div>`).join('')}</div></div></div>
     <div class="acts"><a class="act ${tel ? '' : 'off'}" href="tel:${esc(telClean(tel))}">${ic('phone')}<span>Ligar</span></a><a class="act ${e.telemovel ? '' : 'off'}" href="https://wa.me/${esc(waNum(e.telemovel))}" target="_blank" rel="noopener">${ic('wa')}<span>WhatsApp</span></a><a class="act ${e.email ? '' : 'off'}" href="mailto:${esc(e.email || '')}">${ic('mail')}<span>Email</span></a><a class="act ${dest ? '' : 'off'}" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}" target="_blank" rel="noopener">${ic('pin')}<span>Ir até lá</span></a></div>
@@ -437,7 +438,9 @@ a.btn.pri{color:#fff}
         <div class="fld"><label for="cf-tol">Tolerância antes do bloco seguinte (min)</label><input id="cf-tol" type="number" step="1" value="${c.toleranciaMin ?? 5}"></div>
         <div class="fld"><label for="cf-mf">Mínimo nas assistências fora (min)</label><input id="cf-mf" type="number" step="1" value="${c.minimoForaMin ?? 60}"></div>
         <div class="fld"><label for="cf-mo">Mínimo na oficina (min)</label><input id="cf-mo" type="number" step="1" value="${c.minimoOficinaMin ?? 30}"></div>
-        <div class="fld"><label for="cf-gar">Garantia das reparações (dias)</label><input id="cf-gar" type="number" step="1" value="${c.garantiaDias ?? 90}"></div>
+        <div class="fld"><label for="cf-gar">Garantia de peças e reparações (dias)</label><input id="cf-gar" type="number" step="1" value="${c.garantiaDias ?? 30}"></div>
+        <div class="fld"><label for="cf-garn">Garantia de máquinas novas (dias)</label><input id="cf-garn" type="number" step="1" value="${c.garantiaMaqNovaDias ?? 365}"></div>
+        <div class="fld"><label for="cf-garu">Garantia de máquinas usadas (dias)</label><input id="cf-garu" type="number" step="1" value="${c.garantiaMaqUsadaDias ?? 180}"></div>
         <div class="fld"><label for="cf-lat">Morada da empresa · latitude</label><input id="cf-lat" type="number" step="any" value="${c.baseLat ?? ''}"></div>
         <div class="fld"><label for="cf-lng">longitude</label><input id="cf-lng" type="number" step="any" value="${c.baseLng ?? ''}"></div></div>
         <label class="tog"><input id="cf-iv" type="checkbox" ${c.idaVolta ? 'checked' : ''}><span>Nos clientes por km, cobrar ida e volta</span></label>
@@ -448,7 +451,7 @@ a.btn.pri{color:#fff}
         ${D('desl_tabelas').map(t => `<div class="fg" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;align-items:end;margin-bottom:10px"><div class="fld"><label>Nome</label><input data-dtn="${t.id}" value="${esc(t.nome)}"></div><div class="fld"><label>Escalões</label><input data-dte="${t.id}" value="${esc(escTxt(t.escaloes))}"></div><button class="btn" data-act="ofTabSave" data-id="${t.id}">Guardar</button></div><p class="note" style="margin:-4px 0 14px">${D('entidades').filter(e => e.deslTabela === t.id).length} clientes usam esta tabela</p>`).join('')}
         ${S.canWrite ? '<button class="btn" data-act="ofTabNew">' + ic('plus', 16) + 'Nova tabela</button>' : ''}</div></div></div>`;
   });
-  ACT.ofCfgSave = async () => { const n = id => { const x = $('#' + id).value; return x === '' ? null : parseFloat(x); }; if (await patch('oficina_config', 1, { precoHora: n('cf-ph'), precoKm: n('cf-pk'), blocoMin: n('cf-bl') || 30, toleranciaMin: n('cf-tol') ?? 5, minimoForaMin: n('cf-mf') ?? 60, minimoOficinaMin: n('cf-mo') ?? 30, garantiaDias: n('cf-gar') || 90, baseLat: n('cf-lat'), baseLng: n('cf-lng'), idaVolta: $('#cf-iv').checked })) toast('Guardado'); };
+  ACT.ofCfgSave = async () => { const n = id => { const x = $('#' + id).value; return x === '' ? null : parseFloat(x); }; if (await patch('oficina_config', 1, { precoHora: n('cf-ph'), precoKm: n('cf-pk'), blocoMin: n('cf-bl') || 30, toleranciaMin: n('cf-tol') ?? 5, minimoForaMin: n('cf-mf') ?? 60, minimoOficinaMin: n('cf-mo') ?? 30, garantiaDias: n('cf-gar') || 30, garantiaMaqNovaDias: n('cf-garn') || 365, garantiaMaqUsadaDias: n('cf-garu') || 180, baseLat: n('cf-lat'), baseLng: n('cf-lng'), idaVolta: $('#cf-iv').checked })) toast('Guardado'); };
   ACT.ofTabSave = async d => { const nome = $(`[data-dtn="${d.id}"]`).value.trim(), L = parseEsc($(`[data-dte="${d.id}"]`).value); if (!nome || !L.length) return toast('Falta o nome ou os escalões'); if (await patch('desl_tabelas', d.id, { nome, escaloes: L })) toast('Tabela guardada'); };
   ACT.ofTabNew = async () => { await save('desl_tabelas', null, { nome: 'Nova tabela', escaloes: [{ ate: 40, valor: 30 }, { ate: 70, valor: 50 }, { ate: 150, valor: 90 }] }); };
 
@@ -838,7 +841,7 @@ a.btn.pri{color:#fff}
     const e = ent(f.entidade) || {}, v = valores(f), L = [];
     L.push(['Referência', cod(f)], ['Cliente', e.nome || ''], ...(fora(f) && loc(f) ? [['Local', ondeTxt(f)]] : []), ...(f.proprietario && f.proprietario !== e.nome ? [['Proprietário', f.proprietario]] : []), ['Equipamento', nomeEq(f)], ...(f.nSerie ? [['N.º de série', f.nSerie]] : []));
     if (tipo === 'entrada') L.push(['Data de entrada', fD(f.entrada)], ['Avaria / pedido', f.avaria || '—'], ...(f.prevista ? [['Data prevista', fDY(f.prevista)]] : []));
-    else L.push(...(f.emGarantia ? [['Garantia', 'Reparação coberta pela garantia']] : []), ...(garantiaAte(f) ? [['Garantia da reparação', 'até ' + fDY(garantiaAte(f))]] : []), ['Data de entrada', fDY(f.entrada)], [f.tipo === 'oficina' ? 'Data de entrega' : 'Data do serviço', fDY(f.entregueEm || f.chegadaEm || new Date().toISOString())], ...(f.avaria ? [['Pedido', f.avaria]] : []), ...(f.trabalho ? [['Trabalho realizado', f.trabalho]] : []), ['Tempo de trabalho', fmtMin(v.min) + (v.fmin && v.fmin !== Math.round(v.min) ? ` (a faturar: ${fmtMin(v.fmin)})` : '')], ...(fora(f) && f.km != null ? [['Deslocação', fmtKm(f.km) + ' km']] : []));
+    else L.push(...(f.emGarantia ? [['Garantia', 'Reparação coberta pela garantia']] : []), ...(garantiaAte(f) ? [['Garantia', GAR[f.garantiaTipo || 'pecas'] + ' · ' + durL(gDias(f)) + ' · até ' + fDY(garantiaAte(f))]] : []), ['Data de entrada', fDY(f.entrada)], [f.tipo === 'oficina' ? 'Data de entrega' : 'Data do serviço', fDY(f.entregueEm || f.chegadaEm || new Date().toISOString())], ...(f.avaria ? [['Pedido', f.avaria]] : []), ...(f.trabalho ? [['Trabalho realizado', f.trabalho]] : []), ['Tempo de trabalho', fmtMin(v.min) + (v.fmin && v.fmin !== Math.round(v.min) ? ` (a faturar: ${fmtMin(v.fmin)})` : '')], ...(fora(f) && f.km != null ? [['Deslocação', fmtKm(f.km) + ' km']] : []));
     return L;
   }
   function textoDoc(f, tipo) {
@@ -952,9 +955,11 @@ a.btn.pri{color:#fff}
 
 
   /* =================== MÁQUINAS (N.º DE SÉRIE), GARANTIAS E RETRABALHO =================== */
-  const gDias = () => +(cfg().garantiaDias ?? 90) || 90;
+  const GAR = { pecas: 'Peças / reparação', maq_nova: 'Máquina nova', maq_usada: 'Máquina usada', sem: 'Sem garantia' };
+  const gDias = f => { const c = cfg(), t = f?.garantiaTipo || 'pecas'; return t === 'sem' ? 0 : t === 'maq_nova' ? +(c.garantiaMaqNovaDias ?? 365) || 365 : t === 'maq_usada' ? +(c.garantiaMaqUsadaDias ?? 180) || 180 : +(c.garantiaDias ?? 30) || 30; };
+  const durL = d => d % 365 === 0 ? (d / 365 === 1 ? '1 ano' : d / 365 + ' anos') : d % 30 === 0 && d >= 60 ? d / 30 + ' meses' : d + ' dias';
   const fimFecho = f => (f.entregueEm || f.prontoEm || '').slice(0, 10);
-  const garantiaAte = f => { const d = fimFecho(f); if (!d) return ''; const x = new Date(d + 'T12:00'); x.setDate(x.getDate() + gDias()); return iso(x); };
+  const garantiaAte = f => { const d = fimFecho(f), n = gDias(f); if (!d || !n) return ''; const x = new Date(d + 'T12:00'); x.setDate(x.getDate() + n); return iso(x); };
   const nsN = v => String(v || '').replace(/[^0-9a-z]/gi, '').toUpperCase();
   // trabalho anterior ainda dentro da garantia: mesma máquina (n.º de série) ou o mesmo tipo de peça do mesmo cliente
   function anterior(f) {
@@ -972,6 +977,7 @@ a.btn.pri{color:#fff}
     return `<div class="of-alert" style="border-color:#B45309"><span style="flex:1"><b>${a.certo ? 'Retrabalho: esta máquina' : 'Possível retrabalho: este cliente'} já teve ${a.certo ? 'uma reparação' : 'uma reparação de ' + esc(f.equipamento)} a ${fDY(fimFecho(a.f))}</b><br><span class="note">Ficha ${esc(cod(a.f))} · garantia até ${fDY(garantiaAte(a.f))}${a.f.trabalho ? ' · ' + esc(a.f.trabalho) : ''}${a.certo ? '' : '. As peças não têm n.º de série: confirme se é a mesma.'}</span></span>
       <button class="btn sm" data-act="ofiOpen" data-id="${a.f.id}">Ver ficha anterior</button>${S.canWrite ? `<button class="btn sm pri" data-act="ofiGar" data-id="${f.id}" data-c="1" data-g="${a.f.id}">Marcar como garantia</button>` : ''}</div>`;
   }
+  ACT.ofiGarT = d => patch('fichas', d.id, { garantiaTipo: d.c });
   ACT.ofiGar = async d => { const on = d.c === '1'; if (await patch('fichas', d.id, { emGarantia: on, garantiaDe: on ? d.g || null : null })) toast(on ? 'Marcada como garantia: não se fatura' : 'Tirada da garantia'); };
 
   // histórico de cada máquina pelo n.º de série

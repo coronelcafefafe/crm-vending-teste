@@ -4,14 +4,14 @@
    orçamento opcional, avisos ao cliente (email e WhatsApp), agrupamento de trabalhos iguais,
    rota do dia (do mais longe para o mais perto) e exportação para faturar. */
 window.OFI_INIT = function () {
-  const NOVAS = ['manuais', 'croquis', 'locais', 'fichas', 'fichas_tempos', 'modelos', 'desl_tabelas', 'oficina_config'];
+  const NOVAS = ['tecnicos', 'tempos_padrao', 'kits', 'planos', 'manuais', 'croquis', 'locais', 'fichas', 'fichas_tempos', 'modelos', 'desl_tabelas', 'oficina_config'];
   NOVAS.forEach(c => { if (!COLS.includes(c)) COLS.push(c); S.data[c] = new Map(); });
 
   const EST = { recebido: 'Recebido', diagnostico: 'Em diagnóstico', orcamento: 'Orçamento enviado', aguarda_peca: 'À espera de peça', reparacao: 'Em reparação', pronto: 'Pronto', entregue: 'Entregue', cancelado: 'Cancelado' };
   const EST_T = { recebido: 'info', diagnostico: 'warn', orcamento: 'gold', aguarda_peca: 'bad', reparacao: 'warn', pronto: 'ok', entregue: 'mute', cancelado: 'mute' };
   const TIPO = { oficina: 'Oficina (entrou cá)', guarda: 'Guarda (só armazenamento)', local: 'Assistência no cliente', manutencao: 'Manutenção', reparacao: 'Reparação no cliente' };
   const TIPO_C = { oficina: 'Oficina', guarda: 'Guarda', local: 'No cliente', manutencao: 'Manutenção', reparacao: 'Reparação' };
-  const EQUIP = ['Máquina completa', 'Caldeira', 'Grupo café', 'Moinho doseador', 'Módulo copos', 'Placa eletrónica', 'Moedeiro / sistema de pagamento', 'Bomba', 'Misturador', 'Distribuidor de copos'];
+  const EQUIP = ['Máquina completa', 'Caldeira', 'Grupo café Z2000', 'Grupo café Z3000', 'Moinho doseador', 'Módulo copos', 'Placa eletrónica', 'Moedeiro / sistema de pagamento', 'Bomba', 'Misturador', 'Distribuidor de copos'];
   const ABERTOS = ['recebido', 'diagnostico', 'orcamento', 'aguarda_peca', 'reparacao'];
   const fora = f => ['local', 'manutencao', 'reparacao'].includes(f.tipo);
   const naCasa = f => ['oficina', 'guarda'].includes(f.tipo) && !['entregue', 'cancelado'].includes(f.estado);
@@ -40,7 +40,14 @@ window.OFI_INIT = function () {
   const gruposDe = mod => { const s = new Set(); D('artigos').filter(a => isPeca(a) && servePara(a, mod)).forEach(a => a.grupoPeca && s.add(a.grupoPeca)); return [...s].sort((a, b) => a.localeCompare(b, 'pt')); };
 
   /* ---------- valores ---------- */
-  const tempos = f => D('fichas_tempos').filter(t => t.ficha === f.id);
+  let TIDX = null;
+  const tidx = () => { if (!TIDX) { TIDX = new Map(); D('fichas_tempos').forEach(t => { if (!TIDX.has(t.ficha)) TIDX.set(t.ficha, []); TIDX.get(t.ficha).push(t); }); } return TIDX; };
+  const r0 = render; render = (...a) => { TIDX = null; return r0(...a); };
+  const tempos = f => tidx().get(f.id) || [];
+  const TECS = () => D('tecnicos').filter(t => t.ativo !== false).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+  const tecNome = id => S.data.tecnicos.get(id)?.nome || '';
+  const meuTec = () => { const em = String(S.me?.email || '').toLowerCase(); return D('tecnicos').find(t => t.email && t.email.toLowerCase() === em); };
+  const quemTempo = t => t.tecnico ? tecNome(t.tecnico) : (t.resp ? nameOf(t.resp) : '');
   const aberto = f => tempos(f).find(t => !t.fim);
   const minutos = f => tempos(f).reduce((s, t) => s + (t.fim ? (+t.minutos || 0) : (Date.now() - new Date(t.inicio)) / 60000), 0);
   const precoH = f => +(f.precoHora ?? ent(f.entidade)?.precoHora ?? cfg().precoHora) || 0;
@@ -87,12 +94,12 @@ window.OFI_INIT = function () {
   const tirar = ['leads', 'visitas', 'avencas', 'pedidos', 'pendentes', 'rota', 'compras', 'assistente'];
   for (let i = NAV.length - 1; i >= 0; i--) if (tirar.includes(NAV[i][0])) NAV.splice(i, 1);
   for (let i = NAV.length - 1; i >= 0; i--) if (['maquinas', 'mapa'].includes(NAV[i][0])) NAV.splice(i, 1);
-  NAV.splice(1, 0, ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route'], ['ativos', 'Ativos dos clientes', 'box']);
-  const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['ofcfg', 'Preços e deslocações', 'euro']);
+  NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['planear', 'Planear trabalho', 'cal'], ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route'], ['ativos', 'Ativos dos clientes', 'box']);
+  const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro']);
   for (let i = NAV.length - 1; i > 0; i--) if (NAV[i][0] === 'sep' && (NAV[i - 1][0] === 'sep' || i === NAV.length - 1)) NAV.splice(i, 1);
-  SO_VALORES.push('ofcfg');
-  TABS.splice(0, TABS.length, ['inicio', 'Início', 'home'], ['oficina', 'Oficina', 'tool'], ['rotaof', 'Rota', 'route'], ['clientes', 'Clientes', 'users'], ['mais', 'Mais', 'menu']);
-  Object.assign(TITLES, { ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
+  SO_VALORES.push('ofcfg', 'tecnicosof');
+  TABS.splice(0, TABS.length, ['inicio', 'Início', 'home'], ['meudia', 'O meu dia', 'clock'], ['oficina', 'Oficina', 'tool'], ['clientes', 'Clientes', 'users'], ['mais', 'Mais', 'menu']);
+  Object.assign(TITLES, { meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
   Object.defineProperty(TITLES, 'ofi', { get() { const f = S.data.fichas.get(S.params?.id); return f ? 'Ficha ' + cod(f) : 'Ficha'; } });
   const nc0 = navCounts; navCounts = () => ({ ...nc0(), oficina: D('fichas').filter(f => f.tipo !== 'guarda' && ABERTOS.includes(f.estado)).length });
 
@@ -139,7 +146,7 @@ window.OFI_INIT = function () {
     { k: 'localCoords', l: 'Coordenadas do local (opcional: calcula pela morada)', t: 'text' },
     { k: 'localTelefone', l: 'Telefone do local', t: 'tel' },
     { k: 'avaria', l: 'Avaria / o que o cliente pediu', t: 'area', full: 1 },
-    { k: 'resp', l: 'Técnico', t: 'user', def: '@me' },
+    { k: 'tecnico', l: 'Técnico', t: 'sel', get o() { return Object.fromEntries(TECS().map(t => [t.id, t.nome])); } },
     { k: 'prevista', l: 'Data prometida ao cliente', t: 'date' },
     { k: 'precoHora', l: 'Preço/hora só desta ficha (€) · vazio = do cliente', t: 'num', so: 1 },
     { k: 'notas', l: 'Notas internas', t: 'area', full: 1 },
@@ -246,7 +253,7 @@ a.btn.pri{color:#fff}
     const porAvisar = prontos.filter(f => !f.avisadoEm);
     return `<div class="pg">${roBanner()}
     <div class="mini" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))"><div><span>Na oficina</span><b>${naOf.length}</b></div><div><span>Prontos por entregar</span><b>${prontos.length}</b></div><div><span>Assistências por fazer</span><b>${hoje.length}</b></div><div><span>Há mais de 30 dias</span><b style="color:${antigos.length ? 'var(--bad)' : 'inherit'}">${antigos.length}</b></div></div>
-    ${S.canWrite ? `<div class="of-row2"><button class="btn pri of-big" data-act="ofiNew" data-preset='{"tipo":"oficina"}'>${ic('plus', 18)}Entrada na oficina</button><button class="btn of-big" data-act="ofiNew" data-preset='{"tipo":"local"}'>${ic('pin', 18)}Assistência no cliente</button></div>` : ''}
+    ${S.canWrite ? `<div class="of-row2"><button class="btn pri of-big" data-act="ofiNew" data-preset='{"tipo":"oficina"}'>${ic('plus', 18)}Entrada na oficina</button><button class="btn of-big" data-act="ofiNew" data-preset='{"tipo":"local"}'>${ic('pin', 18)}Assistência no cliente</button><button class="btn of-big" data-act="go" data-v="planear">${ic('cal', 18)}Planear trabalho</button></div>` : ''}
     ${alertasH()}
     ${porAvisar.length ? `<div class="panel"><div class="ph"><h2>Prontos · avisar o cliente</h2></div>${porAvisar.map(fRow).join('')}</div>` : ''}
     <div class="panel"><div class="ph"><h2>Assistências no cliente</h2><button class="lnk" data-act="go" data-v="rotaof">Ver rota</button></div>${hoje.length ? hoje.map(fRow).join('') : '<div class="empty">Sem assistências por fazer.</div>'}</div>
@@ -294,7 +301,7 @@ a.btn.pri{color:#fff}
     <div><button class="btn sm" data-act="go" data-v="oficina">${ic('back', 16)}Oficina</button></div>
     <div class="fh"><span class="of-n" style="min-width:56px;height:56px;font-size:20px">${f.numero}</span><div style="min-width:0;flex:1"><h1>${esc(L0 ? L0.nome : prop(f))}</h1>
       <div class="meta">${badge(cod(f), 'info')}${badge(estL(f), EST_T[f.estado])}${badge(TIPO_C[f.tipo], 'gold')}${(L0 || (f.proprietario && f.proprietario !== e.nome)) && e.nome ? badge('Cliente: ' + e.nome) : ''}${['oficina', 'guarda'].includes(f.tipo) ? badge(`Entrou a ${fDY(f.entrada)} · ${dias(f)} d`, dias(f) > 30 && ABERTOS.includes(f.estado) ? 'bad' : 'mute') : f.prevista ? badge('Agendada ' + fDY(f.prevista)) : ''}${f.faturado ? badge('Faturado', 'ok') : ''}</div></div></div>
-    <div class="panel"><div class="pb" style="padding-top:12px"><div class="kv">${[['Equipamento', nomeEq(f)], ['N.º de série', f.nSerie], ['Grupo', f.grupo], ['Avaria / pedido', f.avaria], ['Técnico', f.resp ? nameOf(f.resp) : ''], ['Notas', f.notas]].filter(x => x[1]).map(([l, x]) => `<div class="kvi"><span>${l}</span><b style="white-space:pre-wrap">${esc(x)}</b></div>`).join('')}</div></div></div>
+    <div class="panel"><div class="pb" style="padding-top:12px"><div class="kv">${[['Equipamento', nomeEq(f)], ['N.º de série', f.nSerie], ['Grupo', f.grupo], ['Avaria / pedido', f.avaria], ['Técnico', f.tecnico ? tecNome(f.tecnico) : (f.resp ? nameOf(f.resp) : '')], ['Notas', f.notas]].filter(x => x[1]).map(([l, x]) => `<div class="kvi"><span>${l}</span><b style="white-space:pre-wrap">${esc(x)}</b></div>`).join('')}</div></div></div>
     <div class="acts"><a class="act ${tel ? '' : 'off'}" href="tel:${esc(telClean(tel))}">${ic('phone')}<span>Ligar</span></a><a class="act ${e.telemovel ? '' : 'off'}" href="https://wa.me/${esc(waNum(e.telemovel))}" target="_blank" rel="noopener">${ic('wa')}<span>WhatsApp</span></a><a class="act ${e.email ? '' : 'off'}" href="mailto:${esc(e.email || '')}">${ic('mail')}<span>Email</span></a><a class="act ${dest ? '' : 'off'}" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}" target="_blank" rel="noopener">${ic('pin')}<span>Ir até lá</span></a></div>
     ${ro ? (f.modelo ? `<div class="of-row2"><button class="btn" data-act="ofiManuais" data-c="${esc(f.modelo)}">${ic('doc', 16)}Manuais</button></div>` : '') : `<div class="of-row2"><button class="btn" data-act="ofiLabel" data-id="${f.id}">${ic('qr', 16)}Imprimir etiqueta</button>${f.tipo === 'oficina' ? `<button class="btn" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrada">${ic('doc', 16)}Comprovativo de entrada</button>` : ''}<button class="btn ${['pronto', 'entregue'].includes(f.estado) ? 'pri' : ''}" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrega">${ic('doc', 16)}${f.tipo === 'oficina' ? 'Guia de entrega' : 'Folha de serviço'}</button><button class="btn" data-act="ofiAviso" data-id="${f.id}">${ic('send', 16)}${fora(f) ? 'Enviar relatório ao cliente' : 'Avisar cliente'}</button>${f.modelo ? `<button class="btn" data-act="ofiManuais" data-c="${esc(f.modelo)}">${ic('doc', 16)}Manuais${(() => { const n = D('manuais').filter(m => norm(m.modelo) === norm(f.modelo)).length; return n ? ` (${n})` : ''; })()}</button>` : ''}<button class="btn" data-act="ofiPdfUm" data-id="${f.id}">${ic('doc', 16)}PDF da ficha</button><button class="btn" data-act="ofiEdit" data-id="${f.id}">${ic('edit', 16)}Editar ficha</button></div>`}
     <div class="panel"><div class="ph"><h2>Estado</h2>${f.avisadoEm ? `<span class="note">Cliente avisado ${fD(f.avisadoEm)}</span>` : ''}</div><div class="pb"><div class="of-est">${Object.entries(EST).map(([k, l]) => `<button class="chipb ${f.estado === k ? 'on' : ''}" data-act="ofiEst" data-id="${f.id}" data-c="${k}" ${ro ? 'disabled' : ''}>${l}</button>`).join('')}</div></div></div>`;
@@ -328,9 +335,9 @@ a.btn.pri{color:#fff}
         <div class="fld" style="width:70px;margin:0"><label for="ofmh">Horas</label><input id="ofmh" type="number" min="0" step="1" inputmode="numeric" placeholder="0"></div>
         <div class="fld" style="width:76px;margin:0"><label for="ofmm">Minutos</label><input id="ofmm" type="number" min="0" max="59" step="1" inputmode="numeric" placeholder="0"></div>
         <div class="fld" style="width:150px;margin:0"><label for="ofmd">Data</label><input id="ofmd" type="date" value="${TODAY()}"></div>
-        <div class="fld" style="flex:1;min-width:150px;margin:0"><label for="ofmr">Técnico</label><select id="ofmr">${teamIds().map(id => `<option value="${esc(id)}" ${id === S.uid ? 'selected' : ''}>${esc(nameOf(id))}</option>`).join('')}</select></div>
+        <div class="fld" style="flex:1;min-width:150px;margin:0"><label for="ofmr">Técnico</label><select id="ofmr">${TECS().map(t => `<option value="${t.id}" ${t.id === (meuTec()?.id || f.tecnico) ? 'selected' : ''}>${esc(t.nome)}</option>`).join('') || '<option value="">—</option>'}</select></div>
         <button class="btn" data-act="ofiTMan" data-id="${f.id}">${ic('plus', 16)}Adicionar tempo</button></div>`}
-      ${T.length ? `<table class="tt" style="margin-top:12px"><tbody>${T.slice(0, 20).map(t => `<tr><td>${t.tipo === 'manual' ? fDY(t.inicio) + ' · <i>manual</i>' : fD(t.inicio)}${t.resp ? ' · ' + esc(nameOf(t.resp)) : ''}</td><td class="num">${t.fim ? fmtMin(t.minutos) : 'a contar'}</td>${ro ? '' : `<td style="width:36px">${t.fim ? `<button class="ib" data-act="ofiTDel" data-id="${t.id}" aria-label="Apagar este tempo">${ic('x', 14)}</button>` : ''}</td>`}</tr>`).join('')}</tbody></table>` : ''}
+      ${T.length ? `<table class="tt" style="margin-top:12px"><tbody>${T.slice(0, 20).map(t => `<tr><td>${t.tipo === 'manual' ? fDY(t.inicio) + ' · <i>manual</i>' : fD(t.inicio)}${quemTempo(t) ? ' · ' + esc(quemTempo(t)) : ''}${t.plano ? ' · lote' : ''}</td><td class="num">${t.fim ? fmtMin(t.minutos) : 'a contar'}</td>${ro ? '' : `<td style="width:36px">${t.fim ? `<button class="ib" data-act="ofiTDel" data-id="${t.id}" aria-label="Apagar este tempo">${ic('x', 14)}</button>` : ''}</td>`}</tr>`).join('')}</tbody></table>` : ''}
     </div></div>`;
 
     // fotos
@@ -518,7 +525,7 @@ a.btn.pri{color:#fff}
   }
   async function iniciaCrono(f) {
     if (aberto(f)) return; const now = new Date().toISOString();
-    await save('fichas_tempos', null, { ficha: f.id, tipo: 'trabalho', inicio: now, resp: S.uid || null });
+    await save('fichas_tempos', null, { ficha: f.id, tipo: 'trabalho', inicio: now, resp: S.uid || null, tecnico: meuTec()?.id || f.tecnico || null });
     const p = { cronoInicio: now, cronoTipo: 'trabalho' }; if (f.estado === 'recebido') p.estado = fora(f) ? 'reparacao' : 'diagnostico';
     await patch('fichas', f.id, p);
   }
@@ -540,7 +547,7 @@ a.btn.pri{color:#fff}
     const f = fx(d.id); if (!f || !canAct()) return; const h = parseInt($('#ofmh')?.value, 10) || 0, m = parseInt($('#ofmm')?.value, 10) || 0, min = h * 60 + m;
     if (min <= 0) return toast('Escreva as horas ou os minutos'); if (min > 24 * 60) return toast('Mais de 24 h numa linha? Confirme o tempo.');
     const dia = $('#ofmd')?.value || TODAY(), ini = new Date(dia + 'T09:00:00').toISOString(), fim = new Date(new Date(ini).getTime() + min * 60000).toISOString();
-    if (await save('fichas_tempos', null, { ficha: f.id, tipo: 'manual', inicio: ini, fim, minutos: min, resp: $('#ofmr')?.value || S.uid || null, notas: 'Tempo escrito à mão' })) toast(fmtMin(min) + ' adicionados');
+    if (await save('fichas_tempos', null, { ficha: f.id, tipo: 'manual', inicio: ini, fim, minutos: min, resp: S.uid || null, tecnico: $('#ofmr')?.value || null, notas: 'Tempo escrito à mão' })) toast(fmtMin(min) + ' adicionados');
   };
   ACT.ofiTDel = async d => { const t = S.data.fichas_tempos.get(d.id); if (!t || !confirm(`Apagar este tempo (${fmtMin(t.minutos)})?`)) return; if (await remove('fichas_tempos', d.id)) toast('Tempo apagado'); };
   // peças
@@ -668,7 +675,7 @@ a.btn.pri{color:#fff}
     if (ds.oforc && S.canWrite) { await patch('fichas', ds.id, { [ds.oforc]: ds.oforc === 'orcValor' ? (t.value === '' ? null : parseFloat(t.value)) : t.value }); return; }
     if (ds.ofkm && S.canWrite) { const km = t.value === '' ? null : parseFloat(t.value), f = fx(ds.ofkm); await patch('fichas', f.id, { km, deslValor: km == null ? null : deslCalc(ent(f.entidade), km)?.valor ?? null }); toast('Km atualizados'); return; }
     if (ds.oflocal && S.canWrite) { await patch('fichas', ds.oflocal, { local: t.value || null }); toast(t.value ? 'Local escolhido' : 'Na morada do cliente'); return; }
-    if (ds.offat && S.canWrite) { await patch('fichas', ds.offat, { faturado: t.checked }); return; }
+    if (ds.offat && S.canWrite) { await patch('fichas', ds.offat, { faturado: t.checked, faturadoEm: t.checked ? new Date().toISOString() : null }); return; }
     if (ds.ofp && S.ofPick) { S.ofPick[ds.ofp] = t.value; if (ds.ofp === 'mod') S.ofPick.grp = ''; render(); }
   });
   document.addEventListener('input', e => { const t = e.target; if (t.dataset?.ofp === 'q' && S.ofPick) { S.ofPick.q = t.value; render(); } });
@@ -842,7 +849,227 @@ a.btn.pri{color:#fff}
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `faturar-${TODAY()}.csv`; document.body.appendChild(a); a.click(); a.remove();
     openSheet(`<div class="sh"><h2>Ficheiro exportado</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb"><p>${L.length} fichas no ficheiro <b>faturar-${TODAY()}.csv</b>.</p><p class="note">Depois de lançar no Sage, marque-as como faturadas para não saírem no próximo ficheiro.</p></div><div class="sf"><span class="grow"></span><button class="btn" data-act="close">Agora não</button><button class="btn pri" data-act="ofiFatAll" data-ids="${L.map(f => f.id).join(',')}">Marcar como faturadas</button></div>`);
   };
-  ACT.ofiFatAll = async d => { for (const id of d.ids.split(',')) await patch('fichas', id, { faturado: true }); closeSheet(); toast('Marcadas como faturadas'); };
+  ACT.ofiFatAll = async d => { for (const id of d.ids.split(',')) await patch('fichas', id, { faturado: true, faturadoEm: new Date().toISOString() }); closeSheet(); toast('Marcadas como faturadas'); };
+
+  /* =================== PLANEAMENTO, MÉDIAS E RENDIMENTO =================== */
+  P.chart = P.chart || 'M4 20V10M10 20V4M16 20v-7M22 20H2';
+  const PER = { manha: 'Manhã', tarde: 'Tarde', dia: 'Dia inteiro' };
+  const capPer = p => { const c = cfg(); return p === 'tarde' ? (+c.tardeMin || 240) : p === 'dia' ? (+c.manhaMin || 240) + (+c.tardeMin || 240) : (+c.manhaMin || 240); };
+  const fechada = f => ['pronto', 'entregue'].includes(f.estado);
+  const minReal = f => tempos(f).reduce((s, t) => s + (t.fim ? (+t.minutos || 0) : 0), 0);
+  // quota de cada técnico numa ficha (pelo tempo)
+  function quotas(f) {
+    const m = new Map(); let tot = 0;
+    tempos(f).forEach(t => { if (!t.fim || !t.tecnico) return; m.set(t.tecnico, (m.get(t.tecnico) || 0) + (+t.minutos || 0)); tot += +t.minutos || 0; });
+    if (!tot && f.tecnico) return new Map([[f.tecnico, 1]]);
+    const q = new Map(); m.forEach((v, k) => q.set(k, tot ? v / tot : 0)); return q;
+  }
+  // médias de tempo por tipo de trabalho (só oficina)
+  let MED = null, MEDk = '';
+  function medias() {
+    const key = D('fichas').length + ':' + D('fichas_tempos').length + ':' + D('tempos_padrao').length;
+    if (MED && MEDk === key) return MED;
+    const g = new Map();
+    D('fichas').filter(f => f.tipo === 'oficina' && fechada(f) && f.equipamento).forEach(f => {
+      const min = minReal(f); if (min <= 0) return;
+      const k = f.equipamento; if (!g.has(k)) g.set(k, { all: [], tec: new Map() }); const o = g.get(k); o.all.push(min);
+      quotas(f).forEach((q, tid) => { if (q >= .8) { if (!o.tec.has(tid)) o.tec.set(tid, []); o.tec.get(tid).push(min); } });
+    });
+    D('tempos_padrao').forEach(t => { if (!g.has(t.equipamento)) g.set(t.equipamento, { all: [], tec: new Map() }); });
+    const st = L => { if (!L.length) return null; const r = L.slice(-40); const avg = r.reduce((a, b) => a + b, 0) / r.length; return { n: L.length, avg, min: Math.min(...r), max: Math.max(...r) }; };
+    MED = new Map(); g.forEach((o, k) => { const tec = new Map(); o.tec.forEach((L, tid) => tec.set(tid, st(L))); MED.set(k, { geral: st(o.all), tec }); }); MEDk = key; return MED;
+  }
+  const padrao = eq => D('tempos_padrao').find(t => norm(t.equipamento) === norm(eq))?.minutos;
+  function estimativa(eq, tid) {
+    const m = medias().get(eq), t = tid && m?.tec.get(tid);
+    if (t && t.n >= 3) return { min: t.avg, fonte: 'média deste técnico (' + t.n + ')' };
+    if (m?.geral && m.geral.n >= 3) return { min: m.geral.avg, fonte: 'média geral (' + m.geral.n + ')' };
+    const p = padrao(eq); if (p) return { min: p, fonte: 'tempo padrão' };
+    return { min: 45, fonte: 'tempo padrão' };
+  }
+  // kit de peças: definido à mão ou tirado do histórico
+  function kitPara(eq, mod) {
+    const k = D('kits').find(x => norm(x.equipamento) === norm(eq) && (!x.modelo || !mod || norm(x.modelo) === norm(mod)));
+    if (k && (k.pecas || []).length) return { pecas: k.pecas, fonte: 'kit', id: k.id };
+    const F0 = D('fichas').filter(f => f.tipo === 'oficina' && fechada(f) && f.equipamento === eq && (!mod || f.modelo === mod)).slice(-60);
+    if (F0.length < 3) return { pecas: [], fonte: 'sem histórico' };
+    const c = new Map(); F0.forEach(f => (f.pecas || []).forEach(p => { if (!p.ref) return; const o = c.get(p.ref) || { n: 0, qt: 0 }; o.n++; o.qt += +p.qt || 0; c.set(p.ref, o); }));
+    const pecas = [...c.entries()].filter(([, o]) => o.n / F0.length >= .3).map(([ref, o]) => ({ ref, qt: Math.max(1, Math.round(o.qt / o.n)) }));
+    return { pecas, fonte: 'histórico (' + F0.length + ' fichas)' };
+  }
+  function pecasLote(L) { // L = [{equipamento, modelo, fichas:[ids]}]
+    const tot = new Map();
+    L.forEach(l => { const k = kitPara(l.equipamento, l.modelo); k.pecas.forEach(p => tot.set(p.ref, (tot.get(p.ref) || 0) + (+p.qt || 0) * l.fichas.length)); });
+    return [...tot.entries()].map(([ref, qt]) => ({ ref, qt, a: porRef(ref) })).sort((a, b) => (a.a?.nome || a.ref).localeCompare(b.a?.nome || b.ref, 'pt'));
+  }
+  const emPlano = () => { const s = new Set(); D('planos').filter(p => p.estado !== 'feito').forEach(p => (p.lotes || []).forEach(l => (l.fichas || []).forEach(id => s.add(id)))); return s; };
+  const PRONTAS_PARA = ['recebido', 'diagnostico', 'reparacao'];
+  function gerarPlano(tid, periodo, modo) {
+    const cap = capPer(periodo), ocup = emPlano();
+    const C = D('fichas').filter(f => f.tipo === 'oficina' && PRONTAS_PARA.includes(f.estado) && !ocup.has(f.id) && (!f.tecnico || f.tecnico === tid)).sort((a, b) => (a.entrada || '').localeCompare(b.entrada || ''));
+    let livre = cap; const lotes = [];
+    const poe = (f) => { const e = estimativa(f.equipamento, tid).min; if (e > livre && (lotes.length || e > cap * 1.15)) return false; let l = modo === 'lotes' ? lotes.find(x => x.equipamento === f.equipamento && x.modelo === (f.modelo || '')) : null; if (!l) { l = { equipamento: f.equipamento, modelo: f.modelo || '', fichas: [], est: 0 }; lotes.push(l); } l.fichas.push(f.id); l.est += e; livre -= e; return true; };
+    if (modo === 'lotes') {
+      const g = new Map(); C.forEach(f => { const k = f.equipamento + '|' + (f.modelo || ''); if (!g.has(k)) g.set(k, []); g.get(k).push(f); });
+      const grupos = [...g.values()].sort((a, b) => b.length - a.length || (a[0].entrada || '').localeCompare(b[0].entrada || ''));
+      grupos.forEach(G => G.forEach(f => { if (livre > 10) poe(f); }));
+    } else C.forEach(f => { if (livre > 10) poe(f); });
+    lotes.forEach(l => l.est = Math.round(l.est));
+    return { lotes, cap, usado: cap - livre };
+  }
+  const proxUtil = () => { const d = new Date(); d.setDate(d.getDate() + 1); while ([0, 6].includes(d.getDay())) d.setDate(d.getDate() + 1); return iso(d); };
+
+  function loteH(l, i, tid, extra = '') {
+    const F = l.fichas.map(id => S.data.fichas.get(id)).filter(Boolean);
+    return `<div class="panel"><div class="ph"><h2>Lote ${i + 1} · ${F.length} × ${esc(l.equipamento)}</h2><span class="note">≈ ${fmtMin(l.est)}${l.min != null ? ' · feito em ' + fmtMin(l.min) : ''}</span></div>
+      <div class="pb" style="padding-bottom:4px"><p class="note" style="margin:0">${esc(l.modelo || '')} · ${esc(estimativa(l.equipamento, tid).fonte)} · ${fmtMin(estimativa(l.equipamento, tid).min)} cada</p></div>
+      ${F.map(f => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero}</span><span class="rt"><span class="r1">${esc(cod(f))} · ${esc(prop(f))}</span><span class="r2">${esc([f.avaria, 'entrou ' + fDY(f.entrada)].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(estL(f), EST_T[f.estado])}<span class="note" style="${dias(f) > 30 ? 'color:var(--bad);font-weight:500' : ''}">${dias(f)} d</span></span></div>`).join('')}${extra}</div>`;
+  }
+  function pecasH(L, plano) {
+    const P0 = pecasLote(L); if (!P0.length) return `<div class="panel"><div class="ph"><h2>Peças a preparar</h2></div><div class="pb"><p class="note" style="margin:0">Sem kit para estes trabalhos. Defina os kits em «Tempos e kits».</p></div></div>`;
+    const prep = new Set(plano?.preparadas || []);
+    return `<div class="panel"><div class="ph"><h2>Peças a preparar</h2><span class="note">${plano ? prep.size + ' de ' + P0.length + ' preparadas' : P0.length + ' referências'}</span></div><div class="pb">
+      ${P0.map(p => `<label class="of-pc" style="cursor:${plano ? 'pointer' : 'default'}">${plano ? `<input type="checkbox" data-ofprep="${plano.id}" value="${esc(p.ref)}" ${prep.has(p.ref) ? 'checked' : ''} style="width:22px;height:22px">` : ''}<span class="grow">${esc(p.a?.nome || 'Peça ' + p.ref)}<small>${esc(p.ref)}${p.a?.stockXd != null ? ' · stock ' + String(p.a.stockXd).replace('.', ',') : ''}</small></span><b class="num">${p.qt}</b></label>`).join('')}
+      <p class="note" style="margin:10px 0 0">Prepare as peças antes de começar, para não perder tempo à procura.</p></div></div>`;
+  }
+
+  /* ----- Planear trabalho ----- */
+  VIEWS.planear = () => loadingOr(() => {
+    const T = TECS(), st = S.ofPlan || (S.ofPlan = { tec: meuTec()?.id || T[0]?.id || '', data: proxUtil(), periodo: 'manha', modo: 'lotes' });
+    const prop0 = S.ofPlanProp;
+    const futuros = D('planos').filter(p => p.data >= TODAY() && p.estado !== 'feito').sort((a, b) => (a.data + a.periodo).localeCompare(b.data + b.periodo));
+    return `<div class="pg">${roBanner()}
+      <div class="panel"><div class="ph"><h2>Organizar o trabalho de um técnico</h2></div><div class="pb"><div class="fg" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+        <div class="fld"><label for="pl-t">Técnico</label><select id="pl-t" data-ofpl="tec">${T.map(t => `<option value="${t.id}" ${t.id === st.tec ? 'selected' : ''}>${esc(t.nome)}</option>`).join('')}</select></div>
+        <div class="fld"><label for="pl-d">Dia</label><input id="pl-d" type="date" data-ofpl="data" value="${st.data}"></div>
+        <div class="fld"><label for="pl-p">Período</label><select id="pl-p" data-ofpl="periodo">${Object.entries(PER).map(([k, l]) => `<option value="${k}" ${k === st.periodo ? 'selected' : ''}>${l} (${fmtMin(capPer(k))})</option>`).join('')}</select></div>
+        <div class="fld"><label for="pl-m">Como organizar</label><select id="pl-m" data-ofpl="modo"><option value="lotes" ${st.modo === 'lotes' ? 'selected' : ''}>Por lotes de trabalhos iguais</option><option value="antigas" ${st.modo === 'antigas' ? 'selected' : ''}>As fichas mais antigas</option></select></div></div>
+        ${S.canWrite ? `<button class="btn pri of-big" data-act="ofiPlanGerar">${ic('cal', 18)}Gerar plano</button>` : ''}</div></div>
+      ${prop0 ? `<div class="of-alert" style="border-color:var(--brand)"><span style="flex:1"><b>${esc(tecNome(prop0.tec))} · ${PER[prop0.periodo]} de ${fDY(prop0.data)}</b><br><span class="note">Ocupação ≈ ${fmtMin(prop0.usado)} de ${fmtMin(prop0.cap)} · ${prop0.lotes.reduce((a, l) => a + l.fichas.length, 0)} fichas em ${prop0.lotes.length} ${prop0.lotes.length === 1 ? 'lote' : 'lotes'}</span></span>${prop0.lotes.length ? `<button class="btn pri" data-act="ofiPlanOk">Confirmar plano</button>` : ''}</div>
+        ${prop0.lotes.length ? prop0.lotes.map((l, i) => loteH(l, i, prop0.tec)).join('') + pecasH(prop0.lotes) : '<div class="panel empty"><b>Não há trabalho para planear</b>Todas as fichas em espera já estão noutro plano.</div>'}` : ''}
+      <div class="panel"><div class="ph"><h2>Planos marcados</h2><span class="note">${futuros.length}</span></div>${futuros.length ? futuros.map(p => `<div class="row" role="button" tabindex="0" data-act="ofiPlanVer" data-id="${p.id}"><span class="rt"><span class="r1">${esc(tecNome(p.tecnico))} · ${PER[p.periodo]} de ${fDY(p.data)}</span><span class="r2">${esc((p.lotes || []).map(l => (l.fichas || []).length + ' × ' + l.equipamento).join(' · '))}</span></span><span class="rr">${badge(p.estado === 'em_curso' ? 'Em curso' : 'Planeado', p.estado === 'em_curso' ? 'warn' : 'info')}${S.canWrite ? `<button class="ib" data-act="ofiPlanDel" data-id="${p.id}" aria-label="Apagar plano">${ic('x', 14)}</button>` : ''}</span></div>`).join('') : '<div class="pb"><p class="note" style="margin:0">Nenhum plano marcado.</p></div>'}</div>
+    </div>`;
+  });
+  ACT.ofiPlanGerar = () => { const st = S.ofPlan; if (!st.tec) return toast('Escolha o técnico'); const r = gerarPlano(st.tec, st.periodo, st.modo); S.ofPlanProp = { ...st, ...r }; render(); };
+  ACT.ofiPlanOk = async (d, b) => {
+    const p = S.ofPlanProp; if (!p) return; b.disabled = true;
+    const id = await save('planos', null, { data: p.data, periodo: p.periodo, tecnico: p.tec, modo: p.modo, lotes: p.lotes.map(l => ({ equipamento: l.equipamento, modelo: l.modelo, fichas: l.fichas, est: l.est })), preparadas: [], estado: 'planeado' });
+    if (id) { for (const l of p.lotes) for (const fid of l.fichas) await patch('fichas', fid, { tecnico: p.tec }); S.ofPlanProp = null; toast('Plano marcado para ' + tecNome(p.tec)); }
+    b.disabled = false;
+  };
+  ACT.ofiPlanVer = d => { const p = S.data.planos.get(d.id); if (!p) return; S.ofDiaTec = p.tecnico; S.ofDiaData = p.data; go('meudia'); };
+  ACT.ofiPlanDel = async d => { if (!confirm('Apagar este plano? As fichas voltam a ficar livres.')) return; if (await remove('planos', d.id)) toast('Plano apagado'); };
+
+  /* ----- O meu dia ----- */
+  VIEWS.meudia = () => loadingOr(() => {
+    const T = TECS(), eu = meuTec(), tid = S.ofDiaTec || eu?.id || T[0]?.id, dia = S.ofDiaData || TODAY();
+    const PL = D('planos').filter(p => p.tecnico === tid && p.data === dia).sort((a, b) => a.periodo.localeCompare(b.periodo) * -1);
+    const prox = D('planos').filter(p => p.tecnico === tid && p.data > dia && p.estado !== 'feito').sort((a, b) => a.data.localeCompare(b.data))[0];
+    let h = `<div class="pg">${roBanner()}<div class="of-row2">${!eu || S.isAdmin ? `<div class="fld" style="margin:0;min-width:150px"><label for="md-t">Técnico</label><select id="md-t" data-ofdia="tec">${T.map(t => `<option value="${t.id}" ${t.id === tid ? 'selected' : ''}>${esc(t.nome)}</option>`).join('')}</select></div>` : `<h2 style="margin:0;flex:1">${esc(eu.nome)}</h2>`}<div class="fld" style="margin:0;width:170px"><label for="md-d">Dia</label><input id="md-d" type="date" data-ofdia="data" value="${dia}"></div></div>`;
+    if (!PL.length) return h + `<div class="panel empty"><b>Sem plano para este dia</b>${S.canWrite ? 'Use «Planear trabalho» para organizar o dia.' : ''}${prox ? `<br><button class="btn sm" style="margin-top:10px" data-act="ofiPlanVer" data-id="${prox.id}">Ver o próximo: ${fDY(prox.data)}</button>` : ''}</div>${S.canWrite ? `<div><button class="btn" data-act="go" data-v="planear">${ic('cal', 16)}Planear trabalho</button></div>` : ''}</div>`;
+    PL.forEach(p => {
+      const L = p.lotes || [], est = L.reduce((a, l) => a + (+l.est || 0), 0);
+      const F = L.flatMap(l => l.fichas || []).map(id => S.data.fichas.get(id)).filter(Boolean), feitas = F.filter(fechada);
+      const real = L.reduce((a, l) => a + (+l.min || 0), 0), estFeitas = feitas.reduce((a, f) => a + estimativa(f.equipamento, tid).min, 0);
+      const rend = real >= 10 && feitas.length ? Math.round(estFeitas / real * 100) : null;
+      h += `<div class="mini"><div><span>${PER[p.periodo]}</span><b>${feitas.length} de ${F.length} fichas</b></div><div><span>Planeado</span><b>${fmtMin(est)}</b></div><div><span>Tempo gasto</span><b>${fmtMin(real)}</b></div><div><span>Rendimento</span><b style="color:${rend == null ? 'inherit' : rend >= 100 ? 'var(--ok,#1a7f4b)' : rend < 80 ? 'var(--bad)' : 'inherit'}">${rend == null ? '—' : rend + ' %'}</b></div></div>`;
+      h += pecasH(L, p);
+      L.forEach((l, i) => {
+        const corre = l.ini && !l.fim, abertas = (l.fichas || []).map(id => S.data.fichas.get(id)).filter(f => f && !fechada(f)).length;
+        const bot = S.canWrite ? `<div class="pb"><div class="of-row2">${corre ? `<div style="flex:1"><div class="of-crono" id="ofcrono" data-ini="${esc(l.ini)}">00:00:00</div><span class="note">Lote a contar desde ${fD(l.ini)}</span></div><button class="btn pri of-big of-stop" style="flex:0 0 190px" data-act="ofiLoteStop" data-id="${p.id}" data-i="${i}">${ic('clock', 18)}Parar lote</button>` : abertas ? `<button class="btn pri of-big" data-act="ofiLoteStart" data-id="${p.id}" data-i="${i}">${ic('clock', 18)}Iniciar lote (${abertas} ${abertas === 1 ? 'ficha' : 'fichas'})</button>` : `<span class="note">Lote concluído${l.min != null ? ' em ' + fmtMin(l.min) : ''}.</span>`}</div></div>` : '';
+        h += loteH(l, i, tid, bot);
+      });
+      if (S.canWrite && p.estado !== 'feito' && F.length && feitas.length === F.length) h += `<div><button class="btn" data-act="ofiPlanFim" data-id="${p.id}">Fechar o plano</button></div>`;
+    });
+    return h + '</div>';
+  });
+  ACT.ofiLoteStart = async d => {
+    const p = S.data.planos.get(d.id); if (!p || !canAct()) return; if ((p.lotes || []).some(l => l.ini && !l.fim)) return toast('Já há um lote a contar. Pare-o primeiro.');
+    const L = clone(p.lotes); L[+d.i].ini = new Date().toISOString(); L[+d.i].fim = null;
+    await patch('planos', p.id, { lotes: L, estado: 'em_curso' });
+    for (const id of L[+d.i].fichas) { const f = S.data.fichas.get(id); if (f && f.estado === 'recebido') await patch('fichas', id, { estado: 'reparacao' }); }
+    toast('Lote a contar');
+  };
+  ACT.ofiLoteStop = d => {
+    const p = S.data.planos.get(d.id); if (!p) return; const l = p.lotes[+d.i], F = (l.fichas || []).map(id => S.data.fichas.get(id)).filter(f => f && !fechada(f));
+    const min = Math.max(1, Math.round((Date.now() - new Date(l.ini)) / 60000));
+    openSheet(`<div class="sh"><h2>Parar lote · ${fmtMin(min)}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
+      <p class="note" style="margin-top:0">Marque as fichas que ficaram prontas. O tempo divide-se por elas e conta para as médias.</p>
+      ${F.map(f => `<label class="of-pc" style="cursor:pointer"><input type="checkbox" class="of-lchk" value="${f.id}" checked style="width:22px;height:22px"><span class="grow">${esc(cod(f))} · ${esc(f.equipamento)}<small>${esc(prop(f))}</small></span></label>`).join('')}</div>
+      <div class="sf"><span class="grow"></span><button class="btn" data-act="close">Continuar a contar</button><button class="btn pri" data-act="ofiLoteFim" data-id="${p.id}" data-i="${d.i}">Parar e guardar</button></div>`);
+  };
+  ACT.ofiLoteFim = async (d, b) => {
+    const p = S.data.planos.get(d.id); if (!p) return; b.disabled = true;
+    const L = clone(p.lotes), l = L[+d.i], fim = new Date(), min = Math.max(1, Math.round((fim - new Date(l.ini)) / 60000));
+    const ok = [...document.querySelectorAll('.of-lchk:checked')].map(x => x.value), tid = p.tecnico;
+    const cada = ok.length ? Math.max(1, Math.round(min / ok.length)) : 0;
+    for (const id of ok) {
+      await save('fichas_tempos', null, { ficha: id, tipo: 'trabalho', inicio: l.ini, fim: fim.toISOString(), minutos: cada, resp: S.uid || null, tecnico: tid, plano: p.id });
+      await patch('fichas', id, { estado: 'pronto', prontoEm: fim.toISOString(), tecnico: tid });
+    }
+    l.fim = fim.toISOString(); l.min = (+l.min || 0) + min; l.feitas = (l.feitas || 0) + ok.length;
+    if (ok.length < (l.fichas || []).length) l.ini = null;
+    await patch('planos', p.id, { lotes: L });
+    closeSheet(); toast(ok.length ? `${ok.length} prontas · ${fmtMin(cada)} cada` : 'Lote parado');
+  };
+  ACT.ofiPlanFim = async d => { await patch('planos', d.id, { estado: 'feito' }); toast('Plano fechado'); };
+  document.addEventListener('change', async e => {
+    const t = e.target, ds = t.dataset || {};
+    if (ds.ofpl && S.ofPlan) { S.ofPlan[ds.ofpl] = t.value; S.ofPlanProp = null; render(); }
+    if (ds.ofdia) { if (ds.ofdia === 'tec') S.ofDiaTec = t.value; else S.ofDiaData = t.value; render(); }
+    if (ds.ofprep && S.canWrite) { const p = S.data.planos.get(ds.ofprep); if (!p) return; const s = new Set(p.preparadas || []); t.checked ? s.add(t.value) : s.delete(t.value); await patch('planos', p.id, { preparadas: [...s] }); }
+    if (ds.oftp && S.canWrite) { const v = parseInt(t.value, 10); if (!(v > 0)) return toast('Minutos inválidos'); const x = D('tempos_padrao').find(z => z.equipamento === ds.oftp); if (x) await patch('tempos_padrao', x.id, { minutos: v }); else await save('tempos_padrao', null, { equipamento: ds.oftp, minutos: v }); toast('Tempo padrão guardado'); }
+  });
+
+  /* ----- Tempos e kits ----- */
+  VIEWS.tempos = () => loadingOr(() => {
+    const M = medias(), T = TECS(), eqs = [...new Set([...M.keys(), ...EQUIP])].filter(k => k !== 'Máquina completa' || M.has(k)).sort((a, b) => (M.get(b)?.geral?.n || 0) - (M.get(a)?.geral?.n || 0) || a.localeCompare(b, 'pt'));
+    return `<div class="pg">${roBanner()}<p class="note" style="margin:0">Médias com o tempo real das fichas concluídas na oficina (cronómetro, tempo à mão e lotes). Até haver 3 trabalhos usa-se o tempo padrão. O planeador usa a média do técnico quando ele já tem 3 ou mais.</p>
+      <div class="panel" style="overflow:auto"><table class="tt" style="min-width:640px"><thead><tr><th style="text-align:left">Trabalho</th><th>Padrão (min)</th><th>Média geral</th>${T.map(t => `<th>${esc(t.nome)}</th>`).join('')}<th>Kit</th></tr></thead><tbody>
+      ${eqs.map(eq => { const m = M.get(eq), k = kitPara(eq, 'Brio 250'); return `<tr><td><b>${esc(eq)}</b></td><td><input type="number" min="1" step="1" style="width:72px" data-oftp="${esc(eq)}" value="${padrao(eq) ?? ''}" placeholder="45" ${S.canWrite ? '' : 'disabled'}></td><td class="num">${m?.geral ? `<b>${fmtMin(m.geral.avg)}</b><br><small style="color:var(--ink-3)">${m.geral.n} feitos · ${fmtMin(m.geral.min)}–${fmtMin(m.geral.max)}</small>` : '—'}</td>${T.map(t => { const x = m?.tec.get(t.id); return `<td class="num">${x ? fmtMin(x.avg) + `<br><small style="color:var(--ink-3)">${x.n}</small>` : '—'}</td>`; }).join('')}<td><button class="btn sm" data-act="ofiKit" data-c="${esc(eq)}">${k.pecas.length} peças</button></td></tr>`; }).join('')}
+      </tbody></table></div></div>`;
+  });
+  ACT.ofiKit = d => {
+    const eq = d.c, k = kitPara(eq, 'Brio 250');
+    openSheet(`<div class="sh"><h2>Kit · ${esc(eq)}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
+      <p class="note" style="margin-top:0">Peças que se preparam para cada trabalho deste tipo (Brio 250). Origem: ${esc(k.fonte)}.</p>
+      <div id="kitL">${k.pecas.map((p, i) => { const a = porRef(p.ref); return `<div class="of-pc"><span class="grow">${esc(a?.nome || 'Peça ' + p.ref)}<small>${esc(p.ref)}</small></span><input type="number" min="0" step="1" class="kitq" data-ref="${esc(p.ref)}" value="${p.qt}" style="width:64px" ${S.canWrite ? '' : 'disabled'}></div>`; }).join('') || '<p class="note">Sem peças.</p>'}</div>
+      ${S.canWrite ? `<div class="of-row2" style="margin-top:10px;align-items:flex-end"><div class="fld" style="flex:1;margin:0"><label for="kitref">Acrescentar pelo código</label><input id="kitref" placeholder="Ex.: 093167"></div><button class="btn" data-act="ofiKitAdd">Pôr</button></div>` : ''}</div>
+      ${S.canWrite ? `<div class="sf"><span class="grow"></span><button class="btn pri" data-act="ofiKitSave" data-c="${esc(eq)}">Guardar kit</button></div>` : ''}`);
+  };
+  ACT.ofiKitAdd = () => { const r = ($('#kitref')?.value || '').trim(); if (!r) return; const a = porRef(r); if (!a) return toast('Código não encontrado no catálogo'); $('#kitL').insertAdjacentHTML('beforeend', `<div class="of-pc"><span class="grow">${esc(a.nome)}<small>${esc(a.ref)}</small></span><input type="number" min="0" step="1" class="kitq" data-ref="${esc(a.ref)}" value="1" style="width:64px"></div>`); $('#kitref').value = ''; };
+  ACT.ofiKitSave = async d => {
+    const pecas = [...document.querySelectorAll('.kitq')].map(i => ({ ref: i.dataset.ref, qt: parseInt(i.value, 10) || 0 })).filter(p => p.qt > 0);
+    const k = D('kits').find(x => norm(x.equipamento) === norm(d.c) && (!x.modelo || norm(x.modelo) === norm('Brio 250')));
+    if (k) await patch('kits', k.id, { pecas }); else await save('kits', null, { equipamento: d.c, modelo: 'Brio 250', pecas });
+    closeSheet(); toast('Kit guardado');
+  };
+
+  /* ----- Técnicos e rendimento (administrador) ----- */
+  const mesAtual = () => TODAY().slice(0, 7);
+  VIEWS.tecnicosof = () => loadingOr(() => {
+    if (!S.verValores) return '<div class="panel empty"><b>Só para o administrador</b></div>';
+    const mes = S.f.tecmes || mesAtual(), T = TECS();
+    const meses = [...new Set(D('fichas').map(f => (f.faturadoEm || f.prontoEm || '').slice(0, 7)).filter(Boolean).concat(mesAtual()))].sort().reverse().slice(0, 12);
+    const R = new Map(T.map(t => [t.id, { t, fichas: [], fat: 0, min: 0 }]));
+    D('fichas').forEach(f => {
+      const q = quotas(f);
+      if (fechada(f) && (f.prontoEm || '').slice(0, 7) === mes) { let best = null, bq = 0; q.forEach((v, k) => { if (v > bq) { bq = v; best = k; } }); if (best && R.has(best)) R.get(best).fichas.push(f); }
+      if (f.faturado && (f.faturadoEm || '').slice(0, 7) === mes) { const tot = valores(f).total; q.forEach((v, k) => { if (R.has(k)) R.get(k).fat += tot * v; }); }
+    });
+    D('fichas_tempos').forEach(t => { if (t.fim && t.tecnico && R.has(t.tecnico) && (t.inicio || '').slice(0, 7) === mes) R.get(t.tecnico).min += +t.minutos || 0; });
+    const L = [...R.values()].sort((a, b) => b.fat - a.fat), maxF = Math.max(1, ...L.map(x => x.fat)), totF = L.reduce((a, x) => a + x.fat, 0);
+    const nomeMes = m => new Date(m + '-01T12:00').toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
+    return `<div class="pg">${roBanner()}
+      <div class="of-row2"><div class="fld" style="margin:0;min-width:200px"><label for="tm">Mês</label><select id="tm" data-ofmes="1">${meses.map(m => `<option value="${m}" ${m === mes ? 'selected' : ''}>${nomeMes(m)}</option>`).join('')}</select></div><span class="note" style="flex:1">Faturado = fichas faturadas neste mês, sem IVA, divididas pelo tempo que cada técnico trabalhou nelas.</span></div>
+      <div class="mini"><div><span>Faturado no mês</span><b>${eur(totF)}</b></div><div><span>Fichas fechadas</span><b>${L.reduce((a, x) => a + x.fichas.length, 0)}</b></div><div><span>Horas registadas</span><b>${fmtMin(L.reduce((a, x) => a + x.min, 0))}</b></div></div>
+      ${L.map((x, i) => `<div class="panel"><div class="ph"><h2>${i + 1}.º ${esc(x.t.nome)}</h2><b class="num">${eur(x.fat)}</b></div><div class="pb">
+        <div style="height:10px;border-radius:5px;background:var(--surface-2);overflow:hidden;margin-bottom:12px"><div style="height:100%;width:${Math.round(x.fat / maxF * 100)}%;background:var(--brand)"></div></div>
+        <div class="kv"><div class="kvi"><span>Fichas fechadas</span><b>${x.fichas.length}</b></div><div class="kvi"><span>Horas trabalhadas</span><b>${fmtMin(x.min)}</b></div><div class="kvi"><span>Faturado por hora</span><b>${x.min ? eur(x.fat / (x.min / 60)) + '/h' : '—'}</b></div><div class="kvi"><span>Média por ficha</span><b>${x.fichas.length ? eur(x.fat / x.fichas.length) : '—'}</b></div></div>
+        ${x.fichas.length ? `<details style="margin-top:8px"><summary class="note" style="cursor:pointer">Ver as ${x.fichas.length} fichas</summary><div class="of-est" style="margin-top:8px">${x.fichas.sort((a, b) => a.numero - b.numero).map(f => `<button class="chipb" data-act="ofiOpen" data-id="${f.id}">${esc(cod(f))}</button>`).join('')}</div></details>` : ''}</div></div>`).join('')}
+      <div><button class="btn" data-act="go" data-v="tempos">${ic('clock', 16)}Ver tempos médios e kits</button></div></div>`;
+  });
+  document.addEventListener('change', e => { if (e.target?.dataset?.ofmes) { S.f.tecmes = e.target.value; render(); } });
 
   /* ---------- relógio e QR lido pela câmara ---------- */
   setInterval(() => { const el = document.getElementById('ofcrono'); if (!el || !el.dataset.ini) return; const s = Math.max(0, Math.floor((Date.now() - new Date(el.dataset.ini)) / 1000)); el.textContent = pad(Math.floor(s / 3600)) + ':' + pad(Math.floor(s / 60) % 60) + ':' + pad(s % 60); }, 1000);

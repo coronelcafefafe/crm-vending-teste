@@ -107,11 +107,11 @@ window.OFI_INIT = function () {
   for (let i = NAV.length - 1; i >= 0; i--) if (tirar.includes(NAV[i][0])) NAV.splice(i, 1);
   for (let i = NAV.length - 1; i >= 0; i--) if (['maquinas', 'mapa'].includes(NAV[i][0])) NAV.splice(i, 1);
   NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['planear', 'Planear trabalho', 'cal'], ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route'], ['ativos', 'Ativos dos clientes', 'box']);
-  const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro']);
+  const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['encomendarp', 'Peças a encomendar', 'box'], ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro']);
   for (let i = NAV.length - 1; i > 0; i--) if (NAV[i][0] === 'sep' && (NAV[i - 1][0] === 'sep' || i === NAV.length - 1)) NAV.splice(i, 1);
   SO_VALORES.push('ofcfg', 'tecnicosof');
   TABS.splice(0, TABS.length, ['inicio', 'Início', 'home'], ['meudia', 'O meu dia', 'clock'], ['oficina', 'Oficina', 'tool'], ['clientes', 'Clientes', 'users'], ['mais', 'Mais', 'menu']);
-  Object.assign(TITLES, { meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
+  Object.assign(TITLES, { encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
   Object.defineProperty(TITLES, 'ofi', { get() { const f = S.data.fichas.get(S.params?.id); return f ? 'Ficha ' + cod(f) : 'Ficha'; } });
   const nc0 = navCounts; navCounts = () => ({ ...nc0(), oficina: D('fichas').filter(f => f.tipo !== 'guarda' && ABERTOS.includes(f.estado)).length });
 
@@ -267,6 +267,7 @@ a.btn.pri{color:#fff}
     <div class="mini" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))"><div><span>Na oficina</span><b>${naOf.length}</b></div><div><span>Prontos por entregar</span><b>${prontos.length}</b></div><div><span>Assistências por fazer</span><b>${hoje.length}</b></div><div><span>Há mais de 30 dias</span><b style="color:${antigos.length ? 'var(--bad)' : 'inherit'}">${antigos.length}</b></div></div>
     ${S.canWrite ? `<div class="of-row2"><button class="btn pri of-big" data-act="ofiNew" data-preset='{"tipo":"oficina"}'>${ic('plus', 18)}Entrada na oficina</button><button class="btn of-big" data-act="ofiNew" data-preset='{"tipo":"local"}'>${ic('pin', 18)}Assistência no cliente</button><button class="btn of-big" data-act="go" data-v="planear">${ic('cal', 18)}Planear trabalho</button></div>` : ''}
     ${alertasH()}
+    ${(() => { const n = aEncomendar().length; return n ? `<div class="of-alert" style="border-color:#B45309"><span style="flex:1"><b>${n} ${n === 1 ? 'peça precisa' : 'peças precisam'} de ser encomendada${n === 1 ? '' : 's'}</b><br><span class="note">Abaixo do stock mínimo ou em falta para os planos marcados.</span></span><button class="btn sm" data-act="go" data-v="encomendarp">Ver lista</button></div>` : ''; })()}
     ${porAvisar.length ? `<div class="panel"><div class="ph"><h2>Prontos · avisar o cliente</h2></div>${porAvisar.map(fRow).join('')}</div>` : ''}
     <div class="panel"><div class="ph"><h2>Assistências no cliente</h2><button class="lnk" data-act="go" data-v="rotaof">Ver rota</button></div>${hoje.length ? hoje.map(fRow).join('') : '<div class="empty">Sem assistências por fazer.</div>'}</div>
     ${antigos.length ? `<div class="panel"><div class="ph"><h2>Há mais tempo na oficina</h2></div>${antigos.slice(0, 6).map(fRow).join('')}</div>` : ''}
@@ -380,7 +381,7 @@ a.btn.pri{color:#fff}
           <div class="fld"><label for="ofpg">Grupo</label><select id="ofpg" data-ofp="grp"><option value="">Todos os grupos</option>${gruposDe(mod).map(g => `<option ${g === grp ? 'selected' : ''}>${esc(g)}</option>`).join('')}${grp && !gruposDe(mod).includes(grp) ? `<option selected>${esc(grp)}</option>` : ''}</select></div>
           <div class="fld"><label for="ofpq">Procurar</label><input id="ofpq" data-ofp="q" value="${esc(q)}" placeholder="Nome ou referência" autocomplete="off"></div></div>
         <p class="note" style="margin:8px 0 0">${pecasDe(mod, grp).length} peças ${mod ? 'do ' + esc(mod) : ''}${grp ? ' · ' + esc(grp) : ''}. <button class="lnk" style="border:0;background:none;text-decoration:underline;color:var(--ink-2)" data-act="ofiPickX">Fechar</button></p>
-        <div class="of-res" id="ofres">${res.length ? res.map(a => `<div class="of-pc"><span class="grow">${esc(a.nome)}<small>${esc(a.ref || '')}${a.grupoPeca ? ' · ' + esc(a.grupoPeca) : ''}${S.verValores && a.preco != null ? ' · ' + eur(a.preco) : ''}</small></span><button class="btn sm" data-act="ofiPadd" data-id="${f.id}" data-a="${a.id}">Pôr</button></div>`).join('') : '<p class="note">Nenhuma peça com estes filtros.</p>'}</div>`}
+        <div class="of-res" id="ofres">${res.length ? res.map(a => `<div class="of-pc"><span class="grow">${esc(a.nome)}<small>${esc(a.ref || '')}${a.grupoPeca ? ' · ' + esc(a.grupoPeca) : ''}${S.verValores && a.preco != null ? ' · ' + eur(a.preco) : ''}${stkH(a)}</small></span><button class="btn sm" data-act="ofiPadd" data-id="${f.id}" data-a="${a.id}">Pôr</button></div>`).join('') : '<p class="note">Nenhuma peça com estes filtros.</p>'}</div>`}
     </div></div>`;
 
     // orçamento e valores (só para quem vê valores)
@@ -658,7 +659,7 @@ a.btn.pri{color:#fff}
     const f = fx(d.id), { c, p } = achaPt(d); if (!f || !c || !p) return;
     const a = porRef(p.ref), n = (f.pecas || []).filter(x => (a && x.artigo === a.id) || nref(x.ref) === nref(p.ref)).reduce((s, x) => s + (+x.qt || 0), 0);
     openSheet(`<div class="sh"><h2>N.º ${esc(p.pos)} · ${esc(c.grupo)}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
-      <p style="margin:0 0 4px;font-size:17px"><b>${esc(a?.nome || 'Peça ' + p.ref)}</b></p><p class="note" style="margin:0 0 14px">Código ${esc(p.ref)}${p.nota ? ' · ' + esc(p.nota) : ''}${S.verValores && a?.preco != null ? ' · ' + eur(a.preco) : ''}${a ? '' : ' · não está no catálogo'}</p>
+      <p style="margin:0 0 4px;font-size:17px"><b>${esc(a?.nome || 'Peça ' + p.ref)}</b></p><p class="note" style="margin:0 0 14px">Código ${esc(p.ref)}${p.nota ? ' · ' + esc(p.nota) : ''}${S.verValores && a?.preco != null ? ' · ' + eur(a.preco) : ''}${a ? stkH(a) : ' · não está no catálogo'}</p>
       <div class="of-row2"><span style="flex:1">Nesta assistência: <b>${n}</b></span>${S.canWrite ? `<button class="btn" data-act="ofiPosQ" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" data-r="${esc(p.ref)}" data-q="-1" ${n ? '' : 'disabled'}>− 1</button><button class="btn pri" data-act="ofiPosQ" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" data-r="${esc(p.ref)}" data-q="1">+ 1</button>` : ''}</div></div>`);
   };
   ACT.ofiPosQ = async d => {
@@ -898,6 +899,52 @@ a.btn.pri{color:#fff}
   };
   ACT.ofiFatAll = async d => { for (const id of d.ids.split(',')) await patch('fichas', id, { faturado: true, faturadoEm: new Date().toISOString() }); closeSheet(); toast('Marcadas como faturadas'); };
 
+
+  /* =================== STOCK DE PEÇAS =================== */
+  const stockDe = id => { try { const s = window.stockMap ? window.stockMap().get(id) : null; return s ? s.atual : null; } catch (_) { return null; } };
+  let SMc = null, SMk = '';
+  const stockAll = () => { const k = D('stock_mov').length + ':' + D('artigos').length; if (SMc && SMk === k) return SMc; SMc = window.stockMap ? window.stockMap() : new Map(); SMk = k; return SMc; };
+  const stk = id => { const s = stockAll().get(id); return s ? Math.round(s.atual * 100) / 100 : 0; };
+  const stkH = a => { if (!a) return ''; const n = stk(a.id); return ` · <span style="color:${n <= 0 ? 'var(--bad)' : a.stockMin != null && n <= a.stockMin ? '#B45309' : 'inherit'}">stock ${String(n).replace('.', ',')}</span>`; };
+  // a peça aplicada na ficha abate ao stock (um movimento "peça" por artigo e por ficha)
+  const syncA = new Map();
+  async function syncStock(fid) {
+    if (syncA.get(fid)) { syncA.set(fid, 2); return; } syncA.set(fid, 1);
+    try {
+      const f = fx(fid); if (!f) return;
+      const quer = new Map(); (f.pecas || []).forEach(p => { if (p.artigo && S.data.artigos.has(p.artigo)) quer.set(p.artigo, (quer.get(p.artigo) || 0) + (+p.qt || 0)); });
+      const tem = D('stock_mov').filter(m => m.ficha === fid && m.tipo === 'peca');
+      for (const m of tem) { const q = quer.get(m.artigo); if (!q) await remove('stock_mov', m.id); else if (+m.qt !== q) await patch('stock_mov', m.id, { qt: q }); quer.delete(m.artigo); }
+      for (const [artigo, qt] of quer) if (qt > 0) await save('stock_mov', null, { data: TODAY(), tipo: 'peca', artigo, qt, ficha: fid, notas: 'Aplicada na ficha ' + cod(f) });
+    } finally { const again = syncA.get(fid) === 2; syncA.delete(fid); if (again) syncStock(fid); }
+  }
+  const patchF0 = patch;
+  patch = async (col, id, p) => { const r = await patchF0(col, id, p); if (r && col === 'fichas' && p && 'pecas' in p) syncStock(id); return r; };
+  // necessidades dos planos ainda por fazer
+  function precisoPlanos() {
+    const m = new Map();
+    D('planos').filter(p => p.estado !== 'feito').forEach(p => (p.lotes || []).forEach(l => { const n = (l.fichas || []).map(id => S.data.fichas.get(id)).filter(f => f && !fechada(f)).length; if (!n) return; kitPara(l.equipamento, l.modelo).pecas.forEach(k => { const a = porRef(k.ref); if (a) m.set(a.id, (m.get(a.id) || 0) + (+k.qt || 0) * n); }); }));
+    return m;
+  }
+  function aEncomendar() {
+    const prec = precisoPlanos(), L = [];
+    D('artigos').filter(isPeca).forEach(a => { const st = stk(a.id), min = +a.stockMin || 0, nec = prec.get(a.id) || 0; if (a.stockMin == null && !nec) return; const falta = Math.max(0, min + nec - st); if (falta > 0 || st < min) L.push({ a, st, min, nec, falta: Math.ceil(falta) }); });
+    return L.sort((x, y) => (x.a.fornecedor || '').localeCompare(y.a.fornecedor || '', 'pt') || x.a.nome.localeCompare(y.a.nome, 'pt'));
+  }
+  VIEWS.encomendarp = () => loadingOr(() => {
+    const L = aEncomendar(), forn = [...new Set(L.map(x => x.a.fornecedor || 'Sem fornecedor'))];
+    return `<div class="pg">${roBanner()}<p class="note" style="margin:0">Peças abaixo do stock mínimo e peças que faltam para os planos de trabalho marcados. As peças aplicadas nas fichas abatem automaticamente ao stock. As entradas fazem-se em «Stock do armazém».</p>
+      ${L.length ? forn.map(fo => { const X = L.filter(x => (x.a.fornecedor || 'Sem fornecedor') === fo); return `<div class="panel"><div class="ph"><h2>${esc(fo)}</h2><button class="lnk" data-act="ofiEncMail" data-c="${esc(fo)}">Enviar lista por email</button></div>
+        <div style="overflow:auto"><table class="tt" style="min-width:520px"><thead><tr><th style="text-align:left">Peça</th><th>Stock</th><th>Mínimo</th><th>Para os planos</th><th>Encomendar</th></tr></thead><tbody>${X.map(x => `<tr data-act="open" data-col="artigos" data-id="${x.a.id}" style="cursor:pointer"><td>${esc(x.a.nome)}<br><small style="color:var(--ink-3)">${esc(x.a.ref || '')}</small></td><td class="num" style="color:${x.st <= 0 ? 'var(--bad)' : 'inherit'}">${String(x.st).replace('.', ',')}</td><td class="num">${x.a.stockMin ?? '—'}</td><td class="num">${x.nec || '—'}</td><td class="num"><b>${x.falta}</b></td></tr>`).join('')}</tbody></table></div></div>`; }).join('') : '<div class="panel empty"><b>Nada para encomendar</b>Defina o stock mínimo das peças na ficha de cada artigo.</div>'}</div>`;
+  });
+  ACT.ofiEncMail = d => {
+    const X = aEncomendar().filter(x => (x.a.fornecedor || 'Sem fornecedor') === d.c && x.falta > 0); if (!X.length) return toast('Nada para encomendar a este fornecedor');
+    const txt = `Bom dia,\n\nGostaríamos de encomendar:\n\n${X.map(x => `- ${x.falta} × ${x.a.ref || ''} ${x.a.nome}`).join('\n')}\n\nObrigado.${assinOf()}`;
+    location.href = `mailto:?subject=${encodeURIComponent('Encomenda de peças · ' + cfg().empresa)}&body=${encodeURIComponent(txt)}`;
+  };
+  // ficha do artigo: stock mínimo e fornecedor
+  if (F.artigos && !F.artigos.some(f => f.k === 'stockMin')) F.artigos.push({ k: 'stockMin', l: 'Stock mínimo (avisa para encomendar)', t: 'num' }, { k: 'fornecedor', l: 'Fornecedor', t: 'text' });
+
   /* =================== PLANEAMENTO, MÉDIAS E RENDIMENTO =================== */
   P.chart = P.chart || 'M4 20V10M10 20V4M16 20v-7M22 20H2';
   const PER = { manha: 'Manhã', tarde: 'Tarde', dia: 'Dia inteiro' };
@@ -976,7 +1023,7 @@ a.btn.pri{color:#fff}
     const P0 = pecasLote(L); if (!P0.length) return `<div class="panel"><div class="ph"><h2>Peças a preparar</h2></div><div class="pb"><p class="note" style="margin:0">Sem kit para estes trabalhos. Defina os kits em «Tempos e kits».</p></div></div>`;
     const prep = new Set(plano?.preparadas || []);
     return `<div class="panel"><div class="ph"><h2>Peças a preparar</h2><span class="note">${plano ? prep.size + ' de ' + P0.length + ' preparadas' : P0.length + ' referências'}</span></div><div class="pb">
-      ${P0.map(p => `<label class="of-pc" style="cursor:${plano ? 'pointer' : 'default'}">${plano ? `<input type="checkbox" data-ofprep="${plano.id}" value="${esc(p.ref)}" ${prep.has(p.ref) ? 'checked' : ''} style="width:22px;height:22px">` : ''}<span class="grow">${esc(p.a?.nome || 'Peça ' + p.ref)}<small>${esc(p.ref)}${p.a?.stockXd != null ? ' · stock ' + String(p.a.stockXd).replace('.', ',') : ''}</small></span><b class="num">${p.qt}</b></label>`).join('')}
+      ${P0.map(p => `<label class="of-pc" style="cursor:${plano ? 'pointer' : 'default'}">${plano ? `<input type="checkbox" data-ofprep="${plano.id}" value="${esc(p.ref)}" ${prep.has(p.ref) ? 'checked' : ''} style="width:22px;height:22px">` : ''}<span class="grow">${esc(p.a?.nome || 'Peça ' + p.ref)}<small>${esc(p.ref)}${p.a ? stkH(p.a) : ''}${p.a && stk(p.a.id) < p.qt ? ` · <b style="color:var(--bad)">faltam ${Math.ceil(p.qt - Math.max(0, stk(p.a.id)))}</b>` : ''}</small></span><b class="num">${p.qt}</b></label>`).join('')}
       <p class="note" style="margin:10px 0 0">Prepare as peças antes de começar, para não perder tempo à procura.</p></div></div>`;
   }
 

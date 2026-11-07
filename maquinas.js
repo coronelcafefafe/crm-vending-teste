@@ -695,6 +695,7 @@ window.MAQ_INIT = function () {
     D('artigos').forEach(a => { if (a.stockXd == null || a.stockXd === '' || a.oculto) return; const s = g(a.id); s.xdStock = +a.stockXd; s.atual = s.xdStock; });
     return M0;
   }
+  window.stockMap = stockMap;
   VIEWS.stock = () => loadingOr(() => {
     const SM = stockMap(), chips = ['Com stock', 'Todos', 'Em falta'], c = S.f.stock ?? chips[0];
     let L = [...SM.entries()].map(([id, s]) => ({ a: art(id), s })).filter(x => x.a)

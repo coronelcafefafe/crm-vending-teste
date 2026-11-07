@@ -4,7 +4,7 @@
    orçamento opcional, avisos ao cliente (email e WhatsApp), agrupamento de trabalhos iguais,
    rota do dia (do mais longe para o mais perto) e exportação para faturar. */
 window.OFI_INIT = function () {
-  const NOVAS = ['croquis', 'locais', 'fichas', 'fichas_tempos', 'modelos', 'desl_tabelas', 'oficina_config'];
+  const NOVAS = ['manuais', 'croquis', 'locais', 'fichas', 'fichas_tempos', 'modelos', 'desl_tabelas', 'oficina_config'];
   NOVAS.forEach(c => { if (!COLS.includes(c)) COLS.push(c); S.data[c] = new Map(); });
 
   const EST = { recebido: 'Recebido', diagnostico: 'Em diagnóstico', orcamento: 'Orçamento enviado', aguarda_peca: 'À espera de peça', reparacao: 'Em reparação', pronto: 'Pronto', entregue: 'Entregue', cancelado: 'Cancelado' };
@@ -208,6 +208,9 @@ window.OFI_INIT = function () {
 .of-sum td{padding:8px 0}
 [data-act="xdPed"]{display:none!important}
 a.btn.pri{color:#fff}
+.of-cqw{overflow:auto;-webkit-overflow-scrolling:touch;margin-top:10px;border:1px solid var(--line);border-radius:10px;max-height:80vh}
+.of-cqw .of-cq{margin-top:0;border:0;border-radius:0}
+.of-cq-zoom .of-cq{width:220%}
 .of-cq{position:relative;margin-top:10px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
 .of-cq img{display:block;width:100%;height:auto}
 .of-pt{position:absolute;transform:translate(-50%,-50%);min-width:26px;height:26px;padding:0 5px;border-radius:13px;border:2px solid var(--brand);background:rgba(255,255,255,.92);color:var(--brand);font-size:12px;font-weight:700;display:grid;place-items:center}
@@ -293,7 +296,7 @@ a.btn.pri{color:#fff}
       <div class="meta">${badge(cod(f), 'info')}${badge(estL(f), EST_T[f.estado])}${badge(TIPO_C[f.tipo], 'gold')}${(L0 || (f.proprietario && f.proprietario !== e.nome)) && e.nome ? badge('Cliente: ' + e.nome) : ''}${['oficina', 'guarda'].includes(f.tipo) ? badge(`Entrou a ${fDY(f.entrada)} · ${dias(f)} d`, dias(f) > 30 && ABERTOS.includes(f.estado) ? 'bad' : 'mute') : f.prevista ? badge('Agendada ' + fDY(f.prevista)) : ''}${f.faturado ? badge('Faturado', 'ok') : ''}</div></div></div>
     <div class="panel"><div class="pb" style="padding-top:12px"><div class="kv">${[['Equipamento', nomeEq(f)], ['N.º de série', f.nSerie], ['Grupo', f.grupo], ['Avaria / pedido', f.avaria], ['Técnico', f.resp ? nameOf(f.resp) : ''], ['Notas', f.notas]].filter(x => x[1]).map(([l, x]) => `<div class="kvi"><span>${l}</span><b style="white-space:pre-wrap">${esc(x)}</b></div>`).join('')}</div></div></div>
     <div class="acts"><a class="act ${tel ? '' : 'off'}" href="tel:${esc(telClean(tel))}">${ic('phone')}<span>Ligar</span></a><a class="act ${e.telemovel ? '' : 'off'}" href="https://wa.me/${esc(waNum(e.telemovel))}" target="_blank" rel="noopener">${ic('wa')}<span>WhatsApp</span></a><a class="act ${e.email ? '' : 'off'}" href="mailto:${esc(e.email || '')}">${ic('mail')}<span>Email</span></a><a class="act ${dest ? '' : 'off'}" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}" target="_blank" rel="noopener">${ic('pin')}<span>Ir até lá</span></a></div>
-    ${ro ? '' : `<div class="of-row2"><button class="btn" data-act="ofiLabel" data-id="${f.id}">${ic('qr', 16)}Imprimir etiqueta</button>${f.tipo === 'oficina' ? `<button class="btn" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrada">${ic('doc', 16)}Comprovativo de entrada</button>` : ''}<button class="btn ${['pronto', 'entregue'].includes(f.estado) ? 'pri' : ''}" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrega">${ic('doc', 16)}${f.tipo === 'oficina' ? 'Guia de entrega' : 'Folha de serviço'}</button><button class="btn" data-act="ofiAviso" data-id="${f.id}">${ic('send', 16)}${fora(f) ? 'Enviar relatório ao cliente' : 'Avisar cliente'}</button><button class="btn" data-act="ofiPdfUm" data-id="${f.id}">${ic('doc', 16)}PDF da ficha</button><button class="btn" data-act="ofiEdit" data-id="${f.id}">${ic('edit', 16)}Editar ficha</button></div>`}
+    ${ro ? (f.modelo ? `<div class="of-row2"><button class="btn" data-act="ofiManuais" data-c="${esc(f.modelo)}">${ic('doc', 16)}Manuais</button></div>` : '') : `<div class="of-row2"><button class="btn" data-act="ofiLabel" data-id="${f.id}">${ic('qr', 16)}Imprimir etiqueta</button>${f.tipo === 'oficina' ? `<button class="btn" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrada">${ic('doc', 16)}Comprovativo de entrada</button>` : ''}<button class="btn ${['pronto', 'entregue'].includes(f.estado) ? 'pri' : ''}" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrega">${ic('doc', 16)}${f.tipo === 'oficina' ? 'Guia de entrega' : 'Folha de serviço'}</button><button class="btn" data-act="ofiAviso" data-id="${f.id}">${ic('send', 16)}${fora(f) ? 'Enviar relatório ao cliente' : 'Avisar cliente'}</button>${f.modelo ? `<button class="btn" data-act="ofiManuais" data-c="${esc(f.modelo)}">${ic('doc', 16)}Manuais${(() => { const n = D('manuais').filter(m => norm(m.modelo) === norm(f.modelo)).length; return n ? ` (${n})` : ''; })()}</button>` : ''}<button class="btn" data-act="ofiPdfUm" data-id="${f.id}">${ic('doc', 16)}PDF da ficha</button><button class="btn" data-act="ofiEdit" data-id="${f.id}">${ic('edit', 16)}Editar ficha</button></div>`}
     <div class="panel"><div class="ph"><h2>Estado</h2>${f.avisadoEm ? `<span class="note">Cliente avisado ${fD(f.avisadoEm)}</span>` : ''}</div><div class="pb"><div class="of-est">${Object.entries(EST).map(([k, l]) => `<button class="chipb ${f.estado === k ? 'on' : ''}" data-act="ofiEst" data-id="${f.id}" data-c="${k}" ${ro ? 'disabled' : ''}>${l}</button>`).join('')}</div></div></div>`;
 
     // local da assistência (cliente do cliente)
@@ -561,28 +564,90 @@ a.btn.pri{color:#fff}
   };
   document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target?.dataset?.ofcod) { e.preventDefault(); ACT.ofiCod({ id: e.target.dataset.ofcod }); } });
 
-  // croqui: desenho do manual com os números clicáveis
-  const croquiUrl = p => /^https?:/.test(p) ? p : S.db.storage.from('croquis').getPublicUrl(p).data.publicUrl;
+  // croqui: desenho do catálogo de peças com os números clicáveis
+  const croquiUrl = p => /^https?:|^data:/.test(p) ? p : S.db.storage.from('croquis').getPublicUrl(p).data.publicUrl;
+  const ptN = a => Array.isArray(a) ? { pos: String(a[0]), ref: a[1], xy: a[2] || [], nota: a[3] || '' } : { pos: String(a.pos), ref: a.ref, xy: a.x != null ? [[a.x, a.y]] : (a.xy || []), nota: a.nota || '' };
+  S.cqImg = S.cqImg || {}; S.pdfDocs = S.pdfDocs || {};
+  const manPecas = mod => D('manuais').filter(m => norm(m.modelo) === norm(mod) && m.tipo === 'pecas').sort((a, b) => (b.criado || '').localeCompare(a.criado || ''))[0];
+  let pdfjsP = null;
+  const pdfjs = () => pdfjsP || (pdfjsP = import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.min.mjs').then(m => { m.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs'; return m; }));
+  async function pdfDoc(man) {
+    if (!S.pdfDocs[man.id]) S.pdfDocs[man.id] = (async () => { const { data, error } = await S.db.storage.from('manuais').createSignedUrl(man.ficheiro, 3600); if (error) throw error; const lib = await pdfjs(); return lib.getDocument(data.signedUrl).promise; })();
+    return S.pdfDocs[man.id];
+  }
+  async function desenhaCroqui(c, f) {
+    if (S.cqImg[c.id] || c.imagem || S.cqImg[c.id + ':a']) return; S.cqImg[c.id + ':a'] = 1;
+    try {
+      const man = manPecas(c.modelo); if (!man) return;
+      const doc = await pdfDoc(man), page = await doc.getPage(c.pagina), [x0, y0, x1, y1] = c.crop || [0, 0, 595, 842];
+      const k = 1400 / (x1 - x0), vp = page.getViewport({ scale: k }), cv = document.createElement('canvas');
+      cv.width = Math.round((x1 - x0) * k); cv.height = Math.round((y1 - y0) * k);
+      const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.translate(-x0 * k, -y0 * k);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      S.cqImg[c.id] = cv.toDataURL('image/jpeg', .85); render();
+      if (S.canWrite) cv.toBlob(async b => { const path = `${c.id}.jpg`; const { error } = await S.db.storage.from('croquis').upload(path, b, { contentType: 'image/jpeg', upsert: true }); if (!error) patch('croquis', c.id, { imagem: path }); }, 'image/jpeg', .85);
+    } catch (e) { console.warn('croqui', e); S.cqImg[c.id + ':erro'] = 1; render(); } finally { delete S.cqImg[c.id + ':a']; }
+  }
   function croquiH(f, c) {
     if (!c) return '';
+    const P = (c.pontos || []).map(ptN);
     const qtd = ref => { const a = porRef(ref); return (f.pecas || []).filter(p => (a && p.artigo === a.id) || nref(p.ref) === nref(ref)).reduce((s, p) => s + (+p.qt || 0), 0); };
-    return `<div class="of-cq"><img src="${esc(croquiUrl(c.imagem))}" alt="Croqui ${esc(c.grupo)}" loading="lazy">${(c.pontos || []).map(p => { const n = qtd(p.ref); return `<button class="of-pt ${n ? 'on' : ''}" style="left:${+p.x}%;top:${+p.y}%" data-act="ofiPos" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" title="${esc(p.ref)}">${esc(p.pos)}${n ? `<i>${n}</i>` : ''}</button>`; }).join('')}</div>
-      <table class="tt" style="margin-top:8px"><tbody>${(c.pontos || []).map(p => { const a = porRef(p.ref), n = qtd(p.ref); return `<tr data-act="ofiPos" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" style="cursor:pointer"><td style="width:42px"><b>${esc(p.pos)}</b></td><td>${esc(a?.nome || p.nome || '')}<br><small style="color:var(--ink-3)">${esc(p.ref)}</small></td><td class="num">${n ? badge(n + ' na ficha', 'ok') : ''}</td></tr>`; }).join('')}</tbody></table>`;
+    const src = S.cqImg[c.id] || (c.imagem ? croquiUrl(c.imagem) + (c.atualizado ? '?v=' + encodeURIComponent(c.atualizado) : '') : '');
+    if (!src) setTimeout(() => desenhaCroqui(c, f), 0);
+    const semImg = !src ? `<div class="pb"><p class="note" style="margin:0">${S.cqImg[c.id + ':erro'] ? 'Não foi possível abrir o desenho.' : manPecas(c.modelo) ? 'A preparar o desenho do catálogo…' : `Para ver o desenho, carregue o catálogo de peças do ${esc(c.modelo)} em «Manuais». A lista de números já funciona.`}</p></div>` : '';
+    const zoom = S.ofZoom ? ' of-cq-zoom' : '';
+    return `${src ? `<div class="of-row2" style="margin-top:8px"><button class="btn sm" data-act="ofiZoom">${S.ofZoom ? 'Desenho normal' : 'Ampliar desenho'}</button><span class="note">Toque num número para pôr a peça.</span></div><div class="of-cqw${zoom}"><div class="of-cq"><img src="${esc(src)}" alt="Desenho ${esc(c.grupo)}">${P.map(p => { const n = qtd(p.ref); return p.xy.map(([x, y]) => `<button class="of-pt ${n ? 'on' : ''}" style="left:${+x}%;top:${+y}%" data-act="ofiPos" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" data-r="${esc(p.ref)}" title="${esc(p.ref)}">${esc(p.pos)}${n ? `<i>${n}</i>` : ''}</button>`).join(''); }).join('')}</div></div>` : semImg}
+      <table class="tt" style="margin-top:8px"><tbody>${P.map(p => { const a = porRef(p.ref), n = qtd(p.ref); return `<tr data-act="ofiPos" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" data-r="${esc(p.ref)}" style="cursor:pointer"><td style="width:42px"><b>${esc(p.pos)}</b></td><td>${esc(a?.nome || p.ref)}<br><small style="color:var(--ink-3)">${esc(p.ref)}${p.nota ? ' · ' + esc(p.nota) : ''}${p.xy.length ? '' : ' · sem posição no desenho'}</small></td><td class="num">${n ? badge(n + ' na ficha', 'ok') : ''}</td></tr>`; }).join('')}</tbody></table>`;
   }
+  ACT.ofiZoom = () => { S.ofZoom = !S.ofZoom; render(); };
   ACT.ofiCroqui = d => { S.ofCroqui = S.ofCroqui === d.c ? null : d.c; render(); };
+  const achaPt = d => { const c = S.data.croquis.get(d.c); if (!c) return {}; const p = (c.pontos || []).map(ptN).find(x => x.pos === String(d.p) && (!d.r || x.ref === d.r)); return { c, p }; };
   ACT.ofiPos = d => {
-    const f = fx(d.id), c = S.data.croquis.get(d.c); if (!f || !c) return; const p = (c.pontos || []).find(x => String(x.pos) === String(d.p)); if (!p) return;
+    const f = fx(d.id), { c, p } = achaPt(d); if (!f || !c || !p) return;
     const a = porRef(p.ref), n = (f.pecas || []).filter(x => (a && x.artigo === a.id) || nref(x.ref) === nref(p.ref)).reduce((s, x) => s + (+x.qt || 0), 0);
     openSheet(`<div class="sh"><h2>N.º ${esc(p.pos)} · ${esc(c.grupo)}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
-      <p style="margin:0 0 4px;font-size:17px"><b>${esc(a?.nome || p.nome || 'Peça')}</b></p><p class="note" style="margin:0 0 14px">Código ${esc(p.ref)}${S.verValores && a?.preco != null ? ' · ' + eur(a.preco) : ''}${a ? '' : ' · não está no catálogo'}</p>
-      <div class="of-row2"><span style="flex:1">Nesta assistência: <b>${n}</b></span>${S.canWrite ? `<button class="btn" data-act="ofiPosQ" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" data-q="-1" ${n ? '' : 'disabled'}>− 1</button><button class="btn pri" data-act="ofiPosQ" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" data-q="1">+ 1</button>` : ''}</div></div>`);
+      <p style="margin:0 0 4px;font-size:17px"><b>${esc(a?.nome || 'Peça ' + p.ref)}</b></p><p class="note" style="margin:0 0 14px">Código ${esc(p.ref)}${p.nota ? ' · ' + esc(p.nota) : ''}${S.verValores && a?.preco != null ? ' · ' + eur(a.preco) : ''}${a ? '' : ' · não está no catálogo'}</p>
+      <div class="of-row2"><span style="flex:1">Nesta assistência: <b>${n}</b></span>${S.canWrite ? `<button class="btn" data-act="ofiPosQ" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" data-r="${esc(p.ref)}" data-q="-1" ${n ? '' : 'disabled'}>− 1</button><button class="btn pri" data-act="ofiPosQ" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" data-r="${esc(p.ref)}" data-q="1">+ 1</button>` : ''}</div></div>`);
   };
   ACT.ofiPosQ = async d => {
-    const f = fx(d.id), c = S.data.croquis.get(d.c); if (!f || !c) return; const p = (c.pontos || []).find(x => String(x.pos) === String(d.p)); const a = porRef(p.ref);
+    const f = fx(d.id), { c, p } = achaPt(d); if (!f || !p) return; const a = porRef(p.ref);
     if (+d.q > 0) await poePeca(f, a, 1, p.ref);
     else { const L = clone(f.pecas || []), i = L.findIndex(x => (a && x.artigo === a.id) || nref(x.ref) === nref(p.ref)); if (i >= 0) { L[i].qt = (+L[i].qt || 0) - 1; if (L[i].qt <= 0) L.splice(i, 1); await patch('fichas', f.id, { pecas: L }); } }
     ACT.ofiPos(d);
   };
+
+  /* ---------- manuais da máquina ---------- */
+  const TIPO_MAN = { pecas: 'Catálogo de peças', tecnico: 'Manual técnico', utilizador: 'Manual do utilizador', outro: 'Outro' };
+  const tam = b => !b ? '' : b > 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.round(b / 1024) + ' KB';
+  ACT.ofiManuais = d => {
+    const mod = d.c || ''; const L = D('manuais').filter(m => !mod || norm(m.modelo) === norm(mod)).sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt'));
+    openSheet(`<div class="sh"><h2>Manuais${mod ? ' · ' + esc(mod) : ''}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
+      ${L.length ? L.map(m => `<div class="of-pc"><span class="grow">${esc(m.titulo)}<small>${esc(TIPO_MAN[m.tipo] || m.tipo)}${m.tamanho ? ' · ' + tam(m.tamanho) : ''}</small></span><button class="btn sm" data-act="ofiManAbrir" data-id="${m.id}">${ic('dl', 16)}Abrir</button>${S.isAdmin ? `<button class="ib" data-act="ofiManDel" data-id="${m.id}" aria-label="Apagar manual">${ic('x', 14)}</button>` : ''}</div>`).join('') : `<p class="note">Ainda não há manuais${mod ? ' do ' + esc(mod) : ''}.</p>`}
+      ${S.canWrite ? `<div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px"><div class="eyebrow" style="margin-bottom:8px">Carregar manual (PDF)</div><div class="fg">
+        <div class="fld"><label for="mnmod">Modelo</label><input id="mnmod" value="${esc(mod)}" list="mnmodL"><datalist id="mnmodL">${modelosL().map(x => `<option value="${esc(x)}">`).join('')}</datalist></div>
+        <div class="fld"><label for="mntipo">Tipo</label><select id="mntipo">${Object.entries(TIPO_MAN).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
+        <div class="fld full"><label for="mntit">Título</label><input id="mntit" placeholder="Ex.: Catálogo de peças Brio 250"></div>
+        <div class="fld full"><label for="mnfile">Ficheiro</label><input id="mnfile" type="file" accept="application/pdf,.pdf"></div></div>
+        <button class="btn pri" data-act="ofiManUp">${ic('plus', 16)}Carregar</button><p class="note">O catálogo de peças é usado também para os desenhos (croquis) com os números.</p></div>` : ''}</div>`);
+  };
+  ACT.ofiManAbrir = async d => {
+    const m = S.data.manuais.get(d.id); if (!m) return; const w = window.open('', '_blank');
+    const { data, error } = await S.db.storage.from('manuais').createSignedUrl(m.ficheiro, 3600, { download: false });
+    if (error || !data) { w?.close(); return toast('Não foi possível abrir o manual'); }
+    if (w) w.location = data.signedUrl; else location.href = data.signedUrl;
+  };
+  ACT.ofiManUp = async (d, b) => {
+    const file = $('#mnfile')?.files?.[0], mod = ($('#mnmod')?.value || '').trim(), tipo = $('#mntipo')?.value || 'tecnico', tit = ($('#mntit')?.value || '').trim() || file?.name?.replace(/\.pdf$/i, '');
+    if (!file) return toast('Escolha o ficheiro PDF'); if (!mod) return toast('Escreva o modelo');
+    b.disabled = true; toast('A carregar ' + tam(file.size) + '…');
+    const path = `${mod.replace(/[^\w-]+/g, '_')}/${Date.now()}-${file.name.replace(/[^\w.-]+/g, '_')}`;
+    const { error } = await S.db.storage.from('manuais').upload(path, file, { contentType: 'application/pdf' });
+    if (error) { b.disabled = false; console.warn(error); return toast('Não foi possível carregar o ficheiro'); }
+    await save('manuais', null, { modelo: mod, titulo: tit, tipo, ficheiro: path, tamanho: file.size });
+    if (tipo === 'pecas') D('croquis').filter(c => norm(c.modelo) === norm(mod)).forEach(c => { delete S.cqImg[c.id + ':erro']; });
+    toast('Manual carregado'); ACT.ofiManuais({ c: mod });
+  };
+  ACT.ofiManDel = async d => { const m = S.data.manuais.get(d.id); if (!m || !confirm(`Apagar o manual «${m.titulo}»?`)) return; if (await remove('manuais', m.id)) { S.db.storage.from('manuais').remove([m.ficheiro]); toast('Manual apagado'); ACT.ofiManuais({ c: m.modelo }); } };
   ACT.ofiPq = async d => { const f = fx(d.id); if (!f) return; const L = clone(f.pecas || []), i = +d.i; if (!L[i]) return; L[i].qt = (+L[i].qt || 0) + (+d.c); if (L[i].qt <= 0) L.splice(i, 1); await patch('fichas', f.id, { pecas: L }); };
 
   // fotos

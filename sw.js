@@ -1,5 +1,5 @@
 // Mundicacau CRM · service worker: guarda a app para abrir depressa; os dados vêm sempre do Supabase.
-const CACHE = "crm-vending-teste-v8";
+const CACHE = "crm-vending-teste-v9";
 const SHELL = ["./", "index.html", "config.js", "maquinas.js", "oficina.js", "logo.png", "extrato.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {

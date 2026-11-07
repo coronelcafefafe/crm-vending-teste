@@ -9,11 +9,14 @@ window.OFI_INIT = function () {
 
   const EST = { recebido: 'Recebido', diagnostico: 'Em diagnóstico', orcamento: 'Orçamento enviado', aguarda_peca: 'À espera de peça', reparacao: 'Em reparação', pronto: 'Pronto', entregue: 'Entregue', cancelado: 'Cancelado' };
   const EST_T = { recebido: 'info', diagnostico: 'warn', orcamento: 'gold', aguarda_peca: 'bad', reparacao: 'warn', pronto: 'ok', entregue: 'mute', cancelado: 'mute' };
-  const TIPO = { oficina: 'Oficina (entrou cá)', local: 'Assistência no cliente', manutencao: 'Manutenção', reparacao: 'Reparação no cliente' };
-  const TIPO_C = { oficina: 'Oficina', local: 'No cliente', manutencao: 'Manutenção', reparacao: 'Reparação' };
-  const EQUIP = ['Máquina completa', 'Caldeira', 'Grupo café', 'Moinho doseador', 'Placa eletrónica', 'Moedeiro / sistema de pagamento', 'Bomba', 'Misturador', 'Distribuidor de copos', 'Outra peça'];
+  const TIPO = { oficina: 'Oficina (entrou cá)', guarda: 'Guarda (só armazenamento)', local: 'Assistência no cliente', manutencao: 'Manutenção', reparacao: 'Reparação no cliente' };
+  const TIPO_C = { oficina: 'Oficina', guarda: 'Guarda', local: 'No cliente', manutencao: 'Manutenção', reparacao: 'Reparação' };
+  const EQUIP = ['Máquina completa', 'Caldeira', 'Grupo café', 'Moinho doseador', 'Módulo copos', 'Placa eletrónica', 'Moedeiro / sistema de pagamento', 'Bomba', 'Misturador', 'Distribuidor de copos'];
   const ABERTOS = ['recebido', 'diagnostico', 'orcamento', 'aguarda_peca', 'reparacao'];
-  const fora = f => f.tipo !== 'oficina';
+  const fora = f => ['local', 'manutencao', 'reparacao'].includes(f.tipo);
+  const naCasa = f => ['oficina', 'guarda'].includes(f.tipo) && !['entregue', 'cancelado'].includes(f.estado);
+  const ESPERA = ['recebido', 'aguarda_peca', 'orcamento'], CURSO = ['diagnostico', 'reparacao'];
+  const estL = f => f.tipo === 'guarda' && f.estado === 'recebido' ? 'Guardado' : EST[f.estado] || f.estado;
   const cfg = () => S.data.oficina_config.get(1) || { empresa: 'Mundicacau', precoHora: 30, precoKm: 0.4, idaVolta: true, baseLat: 41.19025117241961, baseLng: -8.450665245494452 };
   const prop = f => f.proprietario || entName(f.entidade);
   const loc = f => f.local ? S.data.locais.get(f.local) : null;
@@ -55,6 +58,7 @@ window.OFI_INIT = function () {
   // tempo faturado: blocos de meia hora; passa da tolerância (5 min) → bloco seguinte; mínimo 1 h fora, ½ h na oficina
   function faturaMin(f, min) {
     const c = cfg(), bl = +c.blocoMin || 30, tol = +(c.toleranciaMin ?? 5), mn = fora(f) ? +(c.minimoForaMin ?? 60) : +(c.minimoOficinaMin ?? 30);
+    if (f.tipo === 'guarda' && min <= 0) return 0;
     if (min <= 0 && !(fora(f) && f.chegadaEm)) return 0;
     return Math.max(mn, Math.ceil(Math.max(0, Math.round(min) - tol) / bl) * bl);
   }
@@ -82,14 +86,15 @@ window.OFI_INIT = function () {
   P.dl = 'M12 3v12M7 10l5 5 5-5M4 21h16';
   const tirar = ['leads', 'visitas', 'avencas', 'pedidos', 'pendentes', 'rota', 'compras', 'assistente'];
   for (let i = NAV.length - 1; i >= 0; i--) if (tirar.includes(NAV[i][0])) NAV.splice(i, 1);
-  NAV.splice(1, 0, ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route']);
+  for (let i = NAV.length - 1; i >= 0; i--) if (['maquinas', 'mapa'].includes(NAV[i][0])) NAV.splice(i, 1);
+  NAV.splice(1, 0, ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route'], ['ativos', 'Ativos dos clientes', 'box']);
   const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['ofcfg', 'Preços e deslocações', 'euro']);
   for (let i = NAV.length - 1; i > 0; i--) if (NAV[i][0] === 'sep' && (NAV[i - 1][0] === 'sep' || i === NAV.length - 1)) NAV.splice(i, 1);
   SO_VALORES.push('ofcfg');
   TABS.splice(0, TABS.length, ['inicio', 'Início', 'home'], ['oficina', 'Oficina', 'tool'], ['rotaof', 'Rota', 'route'], ['clientes', 'Clientes', 'users'], ['mais', 'Mais', 'menu']);
-  Object.assign(TITLES, { inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
+  Object.assign(TITLES, { ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
   Object.defineProperty(TITLES, 'ofi', { get() { const f = S.data.fichas.get(S.params?.id); return f ? 'Ficha ' + cod(f) : 'Ficha'; } });
-  const nc0 = navCounts; navCounts = () => ({ ...nc0(), oficina: D('fichas').filter(f => ABERTOS.includes(f.estado)).length });
+  const nc0 = navCounts; navCounts = () => ({ ...nc0(), oficina: D('fichas').filter(f => f.tipo !== 'guarda' && ABERTOS.includes(f.estado)).length });
 
   // clientes: tipos e zonas da Mundicacau, condições de faturação
   Object.keys(TIPOS).forEach(k => delete TIPOS[k]);
@@ -122,7 +127,7 @@ window.OFI_INIT = function () {
     { k: 'estado', l: 'Estado', t: 'sel', o: EST, req: 1, def: 'recebido' },
     { k: 'entidade', l: 'Cliente', t: 'ent', req: 1, full: 1 },
     { k: 'proprietario', l: 'Proprietário da peça (sai na etiqueta) · vazio = nome do cliente', t: 'text', full: 1 },
-    { k: 'equipamento', l: 'O que entrou / equipamento', t: 'sel', o: EQUIP, req: 1, def: 'Máquina completa' },
+    { k: 'equipamento', l: 'O que entrou (escolha ou escreva, ex.: Módulo copos) · uma ficha por peça ou máquina', t: 'text', req: 1, def: 'Máquina completa' },
     { k: 'marca', l: 'Marca', t: 'text', def: 'Necta' },
     { k: 'modelo', l: 'Modelo da máquina', t: 'sel', get o() { return modelosL(); } },
     { k: 'grupo', l: 'Grupo / conjunto (filtra as peças)', t: 'sel', get o() { const s = new Set(); D('artigos').forEach(a => isPeca(a) && a.grupoPeca && s.add(a.grupoPeca)); return [...s].sort((a, b) => a.localeCompare(b, 'pt')); } },
@@ -135,7 +140,7 @@ window.OFI_INIT = function () {
     { k: 'localTelefone', l: 'Telefone do local', t: 'tel' },
     { k: 'avaria', l: 'Avaria / o que o cliente pediu', t: 'area', full: 1 },
     { k: 'resp', l: 'Técnico', t: 'user', def: '@me' },
-    { k: 'prevista', l: 'Data prevista / agendada', t: 'date' },
+    { k: 'prevista', l: 'Data prometida ao cliente', t: 'date' },
     { k: 'precoHora', l: 'Preço/hora só desta ficha (€) · vazio = do cliente', t: 'num', so: 1 },
     { k: 'notas', l: 'Notas internas', t: 'area', full: 1 },
   ];
@@ -152,6 +157,8 @@ window.OFI_INIT = function () {
   }
   // ao editar um local, mostra as coordenadas no campo
   const edit0 = ACT.edit; ACT.edit = (d, b, e) => { if (d.col === 'locais') { const l = S.data.locais.get(d.id); if (l) l.coords = l.lat != null ? `${l.lat}, ${l.lng}` : ''; } return edit0(d, b, e); };
+  const of0 = openForm;
+  openForm = (col, id, preset) => { const r = of0(col, id, preset); if (col === 'fichas') { const i = document.getElementById('f-equipamento'); if (i && !document.getElementById('of-eqL')) { i.setAttribute('list', 'of-eqL'); i.setAttribute('autocomplete', 'off'); i.insertAdjacentHTML('afterend', `<datalist id="of-eqL">${[...new Set([...EQUIP, ...D('fichas').map(f => f.equipamento).filter(Boolean)])].map(x => `<option value="${esc(x)}">`).join('')}</datalist>`); } } return r; };
   // depois de criar uma ficha, abre-a (fotos, etiqueta, cronómetro)
   const save0 = save;
   save = async (col, id, vals) => {
@@ -217,13 +224,13 @@ a.btn.pri{color:#fff}
     const late = f.tipo === 'oficina' && ABERTOS.includes(f.estado) && d > 30;
     return `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero}</span>
       <span class="rt"><span class="r1">${l ? esc(l.nome) + ` <small style="color:var(--ink-3)">· ${esc(e?.nome || '')}</small>` : esc(prop(f)) + (f.proprietario && e && f.proprietario !== e.nome ? ` <small style="color:var(--ink-3)">· ${esc(e.nome)}</small>` : '')}</span><span class="r2">${esc(sub)}</span></span>
-      <span class="rr">${badge(EST[f.estado] || f.estado, EST_T[f.estado])}${f.tipo === 'oficina' ? `<span class="note${late ? '' : ''}" style="${late ? 'color:var(--bad);font-weight:500' : ''}">${d} d</span>` : f.prevista ? `<span class="note">${fD(f.prevista)}</span>` : ''}${aberto(f) ? badge('A contar tempo', 'warn') : ''}</span></div>`;
+      <span class="rr">${badge(estL(f), EST_T[f.estado])}${['oficina', 'guarda'].includes(f.tipo) ? `<span class="note${late ? '' : ''}" style="${late ? 'color:var(--bad);font-weight:500' : ''}">${d} d</span>` : f.prevista ? `<span class="note">${fD(f.prevista)}</span>` : ''}${aberto(f) ? badge('A contar tempo', 'warn') : ''}</span></div>`;
   }
   const byEntrada = (a, b) => (b.entrada || '').localeCompare(a.entrada || '');
 
   function gruposIguais() {
     const m = new Map();
-    D('fichas').filter(f => ['recebido', 'diagnostico'].includes(f.estado) && f.equipamento && f.equipamento !== 'Máquina completa').forEach(f => { const k = f.equipamento; if (!m.has(k)) m.set(k, []); m.get(k).push(f); });
+    D('fichas').filter(f => f.tipo !== 'guarda' && ['recebido', 'diagnostico'].includes(f.estado) && f.equipamento && f.equipamento !== 'Máquina completa').forEach(f => { const k = f.equipamento; if (!m.has(k)) m.set(k, []); m.get(k).push(f); });
     return [...m.entries()].filter(([, L]) => L.length >= 2).sort((a, b) => b[1].length - a[1].length);
   }
   const alertasH = () => gruposIguais().map(([k, L]) => `<div class="of-alert"><span style="flex:1;min-width:220px"><b>${L.length} × ${esc(k)} à espera</b><br><span class="note">${esc([...new Set(L.map(prop))].join(', '))}. Pode fazer todas de seguida.</span></span><button class="btn pri sm" data-act="ofiGrupo" data-c="${esc(k)}">Ver as ${L.length}</button></div>`).join('');
@@ -245,24 +252,27 @@ a.btn.pri{color:#fff}
   });
 
   /* ---------- lista da oficina ---------- */
-  const CHIPS = ['Em curso', 'Na oficina', 'No cliente', 'Prontos', 'Entregues', 'Todas'];
+  const CHIPS = ['Em espera', 'Em curso', 'Prontos', 'Entregues', 'Todas'];
   VIEWS.oficina = () => loadingOr(() => {
-    const c = S.f.oficina || 'Em curso';
-    let L = D('fichas');
+    let c = S.f.oficina || 'Em espera'; if (!c.startsWith('eq:') && !CHIPS.includes(c)) c = 'Em espera';
+    let L = D('fichas').filter(f => f.tipo !== 'guarda' || c === 'Todas');
     if (c.startsWith('eq:')) { const k = c.slice(3); L = L.filter(f => f.equipamento === k && ['recebido', 'diagnostico'].includes(f.estado)); }
-    else if (c === 'Em curso') L = L.filter(f => ABERTOS.includes(f.estado) || f.estado === 'pronto');
-    else if (c === 'Na oficina') L = L.filter(f => f.tipo === 'oficina' && ABERTOS.includes(f.estado));
-    else if (c === 'No cliente') L = L.filter(f => fora(f) && ABERTOS.includes(f.estado));
+    else if (c === 'Em espera') L = L.filter(f => ESPERA.includes(f.estado));
+    else if (c === 'Em curso') L = L.filter(f => CURSO.includes(f.estado));
     else if (c === 'Prontos') L = L.filter(f => f.estado === 'pronto');
     else if (c === 'Entregues') L = L.filter(f => f.estado === 'entregue');
-    L = L.filter(f => match('oficina', f, ['codigo', 'numero', 'proprietario', 'entidade', 'equipamento', 'modelo', 'nSerie', 'avaria'])).sort(byEntrada);
+    const velhoPrimeiro = !['Entregues', 'Todas'].includes(c);
+    L = L.filter(f => match('oficina', f, ['codigo', 'numero', 'proprietario', 'entidade', 'equipamento', 'modelo', 'nSerie', 'avaria'])).sort((a, b) => velhoPrimeiro ? (a.entrada || '').localeCompare(b.entrada || '') : byEntrada(a, b));
     const porFat = D('fichas').filter(f => ['pronto', 'entregue'].includes(f.estado) && !f.faturado).length;
     return `<div class="pg">${roBanner()}
      <div class="tb"><div class="tbr"><label class="srch">${ic('search', 18)}<input id="q-oficina" data-q="oficina" type="search" placeholder="N.º da ficha, cliente, peça, n.º de série" value="${esc(S.q.oficina || '')}" autocomplete="off"></label>${S.canWrite ? `<button class="btn pri" data-act="ofiNew">${ic('plus', 18)}<span>Nova ficha</span></button>` : ''}</div>
-     <div class="chips">${c.startsWith('eq:') ? `<button class="chipb on" data-act="chip" data-v="oficina" data-c="Em curso">${esc(c.slice(3))} ✕</button>` : ''}${CHIPS.map(x => `<button class="chipb ${x === c ? 'on' : ''}" data-act="chip" data-v="oficina" data-c="${x}">${x}</button>`).join('')}</div></div>
-     ${c.startsWith('eq:') ? '' : alertasH()}
+     <div class="chips">${c.startsWith('eq:') ? `<button class="chipb on" data-act="chip" data-v="oficina" data-c="Em espera">${esc(c.slice(3))} ✕</button>` : ''}${CHIPS.map(x => `<button class="chipb ${x === c ? 'on' : ''}" data-act="chip" data-v="oficina" data-c="${x}">${x}</button>`).join('')}</div></div>
+     ${c.startsWith('eq:') ? '' : alertasH()}${velhoPrimeiro && L.length ? '<p class="note" style="margin:0">Do mais antigo para o mais recente: em cima estão as que estão paradas há mais tempo.</p>' : ''}
      ${listBlock('oficina', L, fRow, '<b>Sem fichas</b>Crie uma ficha quando entrar uma peça ou máquina.')}
-     ${S.verValores ? `<div class="panel"><div class="ph"><h2>Faturar</h2></div><div class="pb"><p class="note" style="margin-top:0">${porFat} fichas prontas ou entregues ainda por faturar. O ficheiro abre no Excel e serve de base para lançar no Sage.</p><button class="btn" data-act="ofiExport" ${porFat ? '' : 'disabled'}>${ic('dl', 16)}Exportar para faturar</button></div></div>` : ''}
+     ${(() => { const cl = [...new Set(D('fichas').filter(f => ['pronto', 'entregue'].includes(f.estado) && !f.faturado).map(f => f.entidade))].map(id => [id, entName(id)]).sort((a, b) => a[1].localeCompare(b[1], 'pt')); return `<div class="panel"><div class="ph"><h2>${S.verValores ? 'Faturar e PDF das fichas' : 'PDF das fichas'}</h2></div><div class="pb">
+       <p class="note" style="margin-top:0">${porFat} fichas prontas ou entregues ainda por faturar.${S.verValores ? ' O Excel serve de base para lançar no Sage.' : ''}</p>
+       <div class="fld" style="max-width:360px"><label for="offcli">Cliente</label><select id="offcli"><option value="">Todos os clientes</option>${cl.map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('')}</select></div>
+       <div class="of-row2">${S.verValores ? `<button class="btn" data-act="ofiExport" ${porFat ? '' : 'disabled'}>${ic('dl', 16)}Excel para faturar</button><button class="btn" data-act="ofiPdfLote" data-c="1" ${porFat ? '' : 'disabled'}>${ic('doc', 16)}PDF com preços</button>` : ''}<button class="btn" data-act="ofiPdfLote" data-c="0" ${porFat ? '' : 'disabled'}>${ic('doc', 16)}PDF sem preços${S.verValores ? ' (para o cliente)' : ''}</button></div></div></div>`; })()}
     </div>`;
   });
 
@@ -280,10 +290,10 @@ a.btn.pri{color:#fff}
     let h = `<div class="pg">${roBanner()}
     <div><button class="btn sm" data-act="go" data-v="oficina">${ic('back', 16)}Oficina</button></div>
     <div class="fh"><span class="of-n" style="min-width:56px;height:56px;font-size:20px">${f.numero}</span><div style="min-width:0;flex:1"><h1>${esc(L0 ? L0.nome : prop(f))}</h1>
-      <div class="meta">${badge(cod(f), 'info')}${badge(EST[f.estado], EST_T[f.estado])}${badge(TIPO_C[f.tipo], 'gold')}${(L0 || (f.proprietario && f.proprietario !== e.nome)) && e.nome ? badge('Cliente: ' + e.nome) : ''}${f.tipo === 'oficina' ? badge(`Entrou a ${fDY(f.entrada)} · ${dias(f)} d`, dias(f) > 30 && ABERTOS.includes(f.estado) ? 'bad' : 'mute') : f.prevista ? badge('Agendada ' + fDY(f.prevista)) : ''}${f.faturado ? badge('Faturado', 'ok') : ''}</div></div></div>
+      <div class="meta">${badge(cod(f), 'info')}${badge(estL(f), EST_T[f.estado])}${badge(TIPO_C[f.tipo], 'gold')}${(L0 || (f.proprietario && f.proprietario !== e.nome)) && e.nome ? badge('Cliente: ' + e.nome) : ''}${['oficina', 'guarda'].includes(f.tipo) ? badge(`Entrou a ${fDY(f.entrada)} · ${dias(f)} d`, dias(f) > 30 && ABERTOS.includes(f.estado) ? 'bad' : 'mute') : f.prevista ? badge('Agendada ' + fDY(f.prevista)) : ''}${f.faturado ? badge('Faturado', 'ok') : ''}</div></div></div>
     <div class="panel"><div class="pb" style="padding-top:12px"><div class="kv">${[['Equipamento', nomeEq(f)], ['N.º de série', f.nSerie], ['Grupo', f.grupo], ['Avaria / pedido', f.avaria], ['Técnico', f.resp ? nameOf(f.resp) : ''], ['Notas', f.notas]].filter(x => x[1]).map(([l, x]) => `<div class="kvi"><span>${l}</span><b style="white-space:pre-wrap">${esc(x)}</b></div>`).join('')}</div></div></div>
     <div class="acts"><a class="act ${tel ? '' : 'off'}" href="tel:${esc(telClean(tel))}">${ic('phone')}<span>Ligar</span></a><a class="act ${e.telemovel ? '' : 'off'}" href="https://wa.me/${esc(waNum(e.telemovel))}" target="_blank" rel="noopener">${ic('wa')}<span>WhatsApp</span></a><a class="act ${e.email ? '' : 'off'}" href="mailto:${esc(e.email || '')}">${ic('mail')}<span>Email</span></a><a class="act ${dest ? '' : 'off'}" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}" target="_blank" rel="noopener">${ic('pin')}<span>Ir até lá</span></a></div>
-    ${ro ? '' : `<div class="of-row2"><button class="btn" data-act="ofiLabel" data-id="${f.id}">${ic('qr', 16)}Imprimir etiqueta</button>${f.tipo === 'oficina' ? `<button class="btn" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrada">${ic('doc', 16)}Comprovativo de entrada</button>` : ''}<button class="btn ${['pronto', 'entregue'].includes(f.estado) ? 'pri' : ''}" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrega">${ic('doc', 16)}${f.tipo === 'oficina' ? 'Guia de entrega' : 'Folha de serviço'}</button><button class="btn" data-act="ofiAviso" data-id="${f.id}">${ic('send', 16)}${fora(f) ? 'Enviar relatório ao cliente' : 'Avisar cliente'}</button><button class="btn" data-act="ofiEdit" data-id="${f.id}">${ic('edit', 16)}Editar ficha</button></div>`}
+    ${ro ? '' : `<div class="of-row2"><button class="btn" data-act="ofiLabel" data-id="${f.id}">${ic('qr', 16)}Imprimir etiqueta</button>${f.tipo === 'oficina' ? `<button class="btn" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrada">${ic('doc', 16)}Comprovativo de entrada</button>` : ''}<button class="btn ${['pronto', 'entregue'].includes(f.estado) ? 'pri' : ''}" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrega">${ic('doc', 16)}${f.tipo === 'oficina' ? 'Guia de entrega' : 'Folha de serviço'}</button><button class="btn" data-act="ofiAviso" data-id="${f.id}">${ic('send', 16)}${fora(f) ? 'Enviar relatório ao cliente' : 'Avisar cliente'}</button><button class="btn" data-act="ofiPdfUm" data-id="${f.id}">${ic('doc', 16)}PDF da ficha</button><button class="btn" data-act="ofiEdit" data-id="${f.id}">${ic('edit', 16)}Editar ficha</button></div>`}
     <div class="panel"><div class="ph"><h2>Estado</h2>${f.avisadoEm ? `<span class="note">Cliente avisado ${fD(f.avisadoEm)}</span>` : ''}</div><div class="pb"><div class="of-est">${Object.entries(EST).map(([k, l]) => `<button class="chipb ${f.estado === k ? 'on' : ''}" data-act="ofiEst" data-id="${f.id}" data-c="${k}" ${ro ? 'disabled' : ''}>${l}</button>`).join('')}</div></div></div>`;
 
     // local da assistência (cliente do cliente)
@@ -311,7 +321,13 @@ a.btn.pri{color:#fff}
     h += `<div class="panel"><div class="ph"><h2>Tempo de trabalho</h2><span class="note">Total ${fmtMin(v.min)}${v.fmin ? ' · a faturar ' + fmtMin(v.fmin) : ''}</span></div><div class="pb">
       <div class="of-row2"><div style="flex:1"><div class="of-crono" id="ofcrono" data-ini="${run ? esc(run.inicio) : ''}">${run ? '00:00:00' : fmtMin(v.min)}</div><span class="note">${run ? 'A contar desde ' + fD(run.inicio) + (run.resp ? ' · ' + esc(nameOf(run.resp)) : '') : 'Parado'}</span></div>
       ${ro ? '' : `<button class="btn pri of-big ${run ? 'of-stop' : ''}" style="flex:0 0 170px" data-act="ofiCrono" data-id="${f.id}">${ic('clock', 18)}${run ? 'Parar' : 'Iniciar'}</button>`}</div>
-      ${T.length ? `<table class="tt" style="margin-top:12px"><tbody>${T.slice(0, 8).map(t => `<tr><td>${fD(t.inicio)}${t.resp ? ' · ' + esc(nameOf(t.resp)) : ''}</td><td class="num">${t.fim ? fmtMin(t.minutos) : 'a contar'}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${ro ? '' : `<div class="of-row2" style="margin-top:14px;align-items:flex-end"><span class="note" style="flex-basis:100%;margin-bottom:-4px">Ou escreva o tempo à mão:</span>
+        <div class="fld" style="width:70px;margin:0"><label for="ofmh">Horas</label><input id="ofmh" type="number" min="0" step="1" inputmode="numeric" placeholder="0"></div>
+        <div class="fld" style="width:76px;margin:0"><label for="ofmm">Minutos</label><input id="ofmm" type="number" min="0" max="59" step="1" inputmode="numeric" placeholder="0"></div>
+        <div class="fld" style="width:150px;margin:0"><label for="ofmd">Data</label><input id="ofmd" type="date" value="${TODAY()}"></div>
+        <div class="fld" style="flex:1;min-width:150px;margin:0"><label for="ofmr">Técnico</label><select id="ofmr">${teamIds().map(id => `<option value="${esc(id)}" ${id === S.uid ? 'selected' : ''}>${esc(nameOf(id))}</option>`).join('')}</select></div>
+        <button class="btn" data-act="ofiTMan" data-id="${f.id}">${ic('plus', 16)}Adicionar tempo</button></div>`}
+      ${T.length ? `<table class="tt" style="margin-top:12px"><tbody>${T.slice(0, 20).map(t => `<tr><td>${t.tipo === 'manual' ? fDY(t.inicio) + ' · <i>manual</i>' : fD(t.inicio)}${t.resp ? ' · ' + esc(nameOf(t.resp)) : ''}</td><td class="num">${t.fim ? fmtMin(t.minutos) : 'a contar'}</td>${ro ? '' : `<td style="width:36px">${t.fim ? `<button class="ib" data-act="ofiTDel" data-id="${t.id}" aria-label="Apagar este tempo">${ic('x', 14)}</button>` : ''}</td>`}</tr>`).join('')}</tbody></table>` : ''}
     </div></div>`;
 
     // fotos
@@ -400,22 +416,70 @@ a.btn.pri{color:#fff}
   ACT.ofTabSave = async d => { const nome = $(`[data-dtn="${d.id}"]`).value.trim(), L = parseEsc($(`[data-dte="${d.id}"]`).value); if (!nome || !L.length) return toast('Falta o nome ou os escalões'); if (await patch('desl_tabelas', d.id, { nome, escaloes: L })) toast('Tabela guardada'); };
   ACT.ofTabNew = async () => { await save('desl_tabelas', null, { nome: 'Nova tabela', escaloes: [{ ate: 40, valor: 30 }, { ate: 70, valor: 50 }, { ate: 150, valor: 90 }] }); };
 
-  /* ---------- separador «Assistências» na ficha do cliente ---------- */
+  /* ---------- ficha do cliente, por secções ---------- */
   const vf0 = VIEWS.ficha;
+  const prometH = f => { if (!f.prevista) return ''; const atr = f.prevista < TODAY() && ABERTOS.includes(f.estado); return `<span class="note" style="${atr ? 'color:var(--bad);font-weight:500' : ''}">Prometido ${fDY(f.prevista)}</span>`; };
+  function linhaEspera(f) {
+    const d = dias(f), l = loc(f);
+    return `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}${l ? ` <small style="color:var(--ink-3)">· ${esc(l.nome)}</small>` : ''}</span><span class="r2">${esc([cod(f), TIPO_C[f.tipo], f.avaria].filter(Boolean).join(' · '))}</span></span>
+      <span class="rr">${badge(estL(f), EST_T[f.estado])}<span class="note" style="${d > 30 ? 'color:var(--bad);font-weight:500' : ''}">há ${d} d</span>${prometH(f)}</span></div>`;
+  }
   VIEWS.ficha = () => {
-    let h = vf0(); const e = ent(S.params.id); if (!e) return h;
-    const L = D('fichas').filter(f => f.entidade === e.id).sort(byEntrada), on = S.params.tab === 'assist';
-    h = h.replace('<div class="tabs">', `<div class="tabs"><button class="${on ? 'on' : ''}" data-act="ftab" data-c="assist">Assistências${L.length ? `<i>${L.length}</i>` : ''}</button>`);
-    if (!on) return h;
-    const orc = L.filter(f => f.orcValor != null || f.orcEstado);
+    const e = ent(S.params.id); if (!e) return vf0();
+    const tab = ['resumo', 'tarefas', 'locais', 'encomendas'].includes(S.params.tab) ? S.params.tab : 'resumo';
+    const F0 = D('fichas').filter(f => f.entidade === e.id), asc = (a, b) => (a.entrada || '').localeCompare(b.entrada || '');
+    const espera = F0.filter(f => f.tipo !== 'guarda' && ABERTOS.includes(f.estado)).sort(asc);
+    const ativos = F0.filter(naCasa).sort(asc);
+    const porFat = F0.filter(f => ['pronto', 'entregue'].includes(f.estado) && !f.faturado).sort(asc);
+    const hist = F0.filter(f => f.faturado || f.estado === 'cancelado').sort(byEntrada);
+    const tarefas = D('tarefas').filter(t => t.entidade === e.id && !t.feito);
+    const LS = D('locais').filter(x => x.entidade === e.id).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+    const enc = D('encomendas').filter(x => x.entidade === e.id);
+    const tel = e.telemovel || e.telefone, addr = [e.morada, e.cp, e.localidade].filter(Boolean).join(', ');
     const t = S.data.desl_tabelas.get(e.deslTabela);
-    const box = S.verValores ? `<div class="mini"><div><span>Preço/hora</span><b>${eur(e.precoHora ?? cfg().precoHora)}</b></div><div><span>Deslocação</span><b style="font-size:15px">${e.deslModo === 'escaloes' ? 'Escalões · ' + esc(t?.nome || 'sem tabela') : 'Por km · ' + eur(e.precoKm ?? cfg().precoKm) + '/km'}</b></div></div>` : '';
-    const c = `${box}${S.canWrite ? `<div class="of-row2"><button class="btn sm" data-act="ofiNew" data-preset='${esc(JSON.stringify({ entidade: e.id, tipo: 'oficina' }))}'>${ic('plus', 16)}Entrada na oficina</button><button class="btn sm" data-act="ofiNew" data-preset='${esc(JSON.stringify({ entidade: e.id, tipo: 'local' }))}'>${ic('pin', 16)}Assistência no cliente</button></div>` : ''}
-      ${L.length ? `<div class="panel">${L.map(fRow).join('')}</div>` : '<div class="panel empty"><b>Sem assistências</b></div>'}
-      ${(() => { const LS = D('locais').filter(x => x.entidade === e.id).sort((a, b) => a.nome.localeCompare(b.nome, 'pt')); return `<div class="panel"><div class="ph"><h2>Locais de assistência</h2><span class="note">clientes deste cliente</span>${S.canWrite ? `<button class="lnk" data-act="new" data-col="locais" data-preset='${esc(JSON.stringify({ entidade: e.id }))}'>Novo local</button>` : ''}</div>${LS.length ? LS.map(x => `<div class="row" role="button" tabindex="0" data-act="${S.canWrite ? 'edit' : 'noop'}" data-col="locais" data-id="${x.id}"><span class="rt"><span class="r1">${esc(x.nome)}</span><span class="r2">${esc([x.localidade, x.contacto, x.telefone].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(D('fichas').filter(f => f.local === x.id).length + ' fichas')}</span></div>`).join('') : '<div class="pb"><p class="note" style="margin:0">Sem locais. Se este cliente tem máquinas em casa dos seus clientes (ex.: um torrefator), registe aqui esses locais.</p></div>'}</div>`; })()}
-      ${orc.length && S.verValores ? `<div class="panel"><div class="ph"><h2>Orçamentos</h2></div><div class="pb"><table class="tt"><tbody>${orc.map(f => `<tr data-act="ofiOpen" data-id="${f.id}" style="cursor:pointer"><td>${esc(cod(f))} · ${esc(nomeEq(f))}${f.orcEm ? ' · ' + fDY(f.orcEm) : ''}</td><td>${badge({ enviado: 'Enviado', aceite: 'Aceite', recusado: 'Recusado' }[f.orcEstado] || 'Por enviar')}</td><td class="num">${eur(f.orcValor)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
-    const k = h.lastIndexOf('</div>'); return h.slice(0, k) + c + h.slice(k);
+    const tabs = [['resumo', 'Resumo'], ['tarefas', 'Tarefas', espera.length + tarefas.length], ['locais', 'Locais', LS.length], ['encomendas', 'Vendas', enc.length]];
+    const pre = o => esc(JSON.stringify(Object.assign({ entidade: e.id }, o)));
+    let h = `<div class="pg">${roBanner()}<div class="fh"><span class="av">${esc(initials(e.nome))}</span><div style="min-width:0;flex:1"><h1>${esc(e.nome)}</h1><div class="meta">${(e.tipos || []).map(k => badge(TIPOS[k] || k, 'gold')).join('')}${e.localidade ? badge(e.localidade) : ''}${ativos.length ? badge(ativos.length + ' na empresa', 'info') : ''}</div></div>${S.canWrite ? `<button class="btn sm" data-act="edit" data-col="entidades" data-id="${e.id}">${ic('edit', 16)}<span>Editar</span></button>` : ''}</div>
+    <div class="acts"><a class="act ${tel ? '' : 'off'}" href="tel:${esc(telClean(tel))}">${ic('phone')}<span>Ligar</span></a><a class="act ${e.telemovel ? '' : 'off'}" href="https://wa.me/${esc(waNum(e.telemovel))}" target="_blank" rel="noopener">${ic('wa')}<span>WhatsApp</span></a><a class="act ${e.email ? '' : 'off'}" href="mailto:${esc(e.email || '')}">${ic('mail')}<span>Email</span></a><a class="act ${addr ? '' : 'off'}" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}" target="_blank" rel="noopener">${ic('pin')}<span>Mapa</span></a></div>
+    ${S.canWrite ? `<div class="of-row2"><button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'oficina' })}'>${ic('tool', 16)}Entrada na oficina</button><button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'local' })}'>${ic('pin', 16)}Assistência fora</button><button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'guarda', equipamento: 'Máquina completa' })}'>${ic('box', 16)}Guardar máquina</button><button class="btn sm" data-act="new" data-col="encomendas" data-preset='${pre({})}'>${ic('euro', 16)}Venda de peças</button></div>` : ''}
+    <div class="tabs">${tabs.map(([k, l, n]) => `<button class="${tab === k ? 'on' : ''}" data-act="ftab" data-c="${k}">${l}${n ? `<i>${n}</i>` : ''}</button>`).join('')}</div>`;
+    if (tab === 'resumo') {
+      h += `<div class="panel"><div class="pb" style="padding-top:4px"><div class="kv">${[['Pessoa de contacto', e.contacto], ['Telemóvel', e.telemovel], ['Telefone', e.telefone], ['Email', e.email], ['NIF', e.nif], ['Morada', addr], ...(S.verValores ? [['Preço/hora', eur(e.precoHora ?? cfg().precoHora)], ['Deslocação', e.deslModo === 'escaloes' ? 'Escalões · ' + (t?.nome || 'sem tabela') : 'Por km · ' + eur(e.precoKm ?? cfg().precoKm) + '/km']] : [])].filter(x => x[1]).map(([l, x]) => `<div class="kvi"><span>${l}</span><b>${esc(x)}</b></div>`).join('')}</div>${e.notas ? `<div class="kvi"><span>Notas</span><b style="font-weight:400;white-space:pre-wrap">${esc(e.notas)}</b></div>` : ''}</div></div>
+      <div class="panel"><div class="ph"><h2>Em espera</h2><span class="note">reparações e assistências pedidas · ${espera.length}</span></div>${espera.length ? espera.map(linhaEspera).join('') : '<div class="pb"><p class="note" style="margin:0">Nada em espera.</p></div>'}</div>
+      <div class="panel"><div class="ph"><h2>Ativos na empresa</h2><span class="note">${ativos.length} ${ativos.length === 1 ? 'item' : 'itens'}</span></div>${ativos.length ? ativos.map(linhaEspera).join('') : '<div class="pb"><p class="note" style="margin:0">Este cliente não tem nada na empresa.</p></div>'}</div>
+      <div class="panel"><div class="ph"><h2>Fechadas não faturadas</h2>${S.verValores && porFat.length ? `<b class="num">${eur(porFat.reduce((a, f) => a + valores(f).total, 0))}</b>` : `<span class="note">${porFat.length}</span>`}</div>${porFat.length ? porFat.map(fRow).join('') : '<div class="pb"><p class="note" style="margin:0">Tudo faturado.</p></div>'}</div>
+      <div class="panel"><div class="ph"><h2>Histórico</h2><span class="note">${hist.length}</span></div>${hist.length ? hist.slice(0, S.ofHist === e.id ? 999 : 10).map(fRow).join('') + (hist.length > 10 && S.ofHist !== e.id ? `<div class="pb"><button class="btn sm" data-act="ofiHist" data-id="${e.id}">Ver as ${hist.length}</button></div>` : '') : '<div class="pb"><p class="note" style="margin:0">Sem histórico.</p></div>'}</div>`;
+    }
+    if (tab === 'tarefas') {
+      h += `<div class="panel"><div class="ph"><h2>Fichas por concluir</h2><span class="note">${espera.length}</span></div>${espera.length ? espera.map(linhaEspera).join('') : '<div class="empty"><b>Nada por concluir</b></div>'}</div>`;
+      if (tarefas.length) h += `<div class="panel"><div class="ph"><h2>Outras tarefas em aberto</h2></div>${tarefas.map(x => `<div class="row" role="button" tabindex="0" data-act="edit" data-col="tarefas" data-id="${x.id}"><span class="rt"><span class="r1">${esc(x.titulo)}</span><span class="r2">${x.data ? fDY(x.data) : ''}</span></span></div>`).join('')}</div>`;
+    }
+    if (tab === 'locais') {
+      h += `${S.canWrite ? `<div><button class="btn sm" data-act="new" data-col="locais" data-preset='${pre({})}'>${ic('plus', 16)}Novo local</button></div>` : ''}<div class="panel">${LS.length ? LS.map(x => `<div class="row" role="button" tabindex="0" data-act="${S.canWrite ? 'edit' : 'noop'}" data-col="locais" data-id="${x.id}"><span class="rt"><span class="r1">${esc(x.nome)}</span><span class="r2">${esc([[x.morada, x.cp, x.localidade].filter(Boolean).join(', '), x.contacto, x.telefone].filter(Boolean).join(' · '))}</span></span><span class="rr">${x.lat == null ? badge('Sem coordenadas', 'warn') : ''}${badge(D('fichas').filter(f => f.local === x.id).length + ' fichas')}</span></div>`).join('') : '<div class="empty"><b>Sem locais</b>Registe os clientes deste cliente onde estão as máquinas.</div>'}</div>`;
+    }
+    if (tab === 'encomendas') {
+      h += `${S.canWrite ? `<div><button class="btn sm" data-act="new" data-col="encomendas" data-preset='${pre({})}'>${ic('plus', 16)}Venda de peças / consumíveis</button></div>` : ''}${enc.length ? `<div class="panel">${enc.sort((a, b) => (b.data || '').localeCompare(a.data || '')).map(encRow).join('')}</div>` : '<div class="panel empty"><b>Sem vendas</b></div>'}`;
+    }
+    return h + '</div>';
   };
+  ACT.ofiHist = d => { S.ofHist = d.id; render(); };
+
+  /* ---------- Ativos dos clientes (o que cada cliente tem na empresa) ---------- */
+  VIEWS.ativos = () => loadingOr(() => {
+    const A = D('fichas').filter(naCasa), m = new Map();
+    A.forEach(f => { if (!m.has(f.entidade)) m.set(f.entidade, []); m.get(f.entidade).push(f); });
+    const q = norm(S.q.ativos || ''), asc = (a, b) => (a.entrada || '').localeCompare(b.entrada || '');
+    let C = [...m.entries()].map(([id, L]) => ({ id, nome: entName(id), L: L.sort(asc) })).filter(c => !q || norm(c.nome).includes(q) || c.L.some(f => norm(nomeEq(f) + ' ' + cod(f) + ' ' + (f.nSerie || '')).includes(q)));
+    C.sort((a, b) => b.L.length - a.L.length || a.nome.localeCompare(b.nome, 'pt'));
+    const resumo = L => { const k = new Map(); L.forEach(f => { const n = f.equipamento || 'Outro'; k.set(n, (k.get(n) || 0) + 1); }); return [...k.entries()].map(([n, x]) => `${x} × ${n}`).join(' · '); };
+    return `<div class="pg">${roBanner()}
+      <div class="mini"><div><span>Clientes com material cá</span><b>${m.size}</b></div><div><span>Itens na empresa</span><b>${A.length}</b></div><div><span>Em guarda</span><b>${A.filter(f => f.tipo === 'guarda').length}</b></div><div><span>Em reparação / prontos</span><b>${A.filter(f => f.tipo === 'oficina').length}</b></div></div>
+      <div class="tb"><div class="tbr"><label class="srch">${ic('search', 18)}<input id="q-ativos" data-q="ativos" type="search" placeholder="Cliente, equipamento, código ou n.º de série" value="${esc(S.q.ativos || '')}" autocomplete="off"></label>${S.canWrite ? `<button class="btn" data-act="ofiNew" data-preset='{"tipo":"guarda","equipamento":"Máquina completa"}'>${ic('box', 18)}<span>Guardar máquina</span></button>` : ''}</div></div>
+      <p class="note" style="margin:0">Só aparecem clientes com alguma coisa na empresa (em reparação, pronta por levantar ou em guarda). Os dias contam desde a entrada, para a futura taxa de espaço.</p>
+      ${C.length ? C.map(c => `<div class="panel"><div class="ph"><h2><a href="#" data-act="ofiCli" data-id="${c.id}" style="color:inherit;text-decoration:none">${esc(c.nome)}</a></h2><span class="note">${esc(resumo(c.L))}</span></div>${c.L.map(f => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}</span><span class="r2">${esc([cod(f), f.nSerie ? 'S/N ' + f.nSerie : '', 'entrou ' + fDY(f.entrada)].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(estL(f), EST_T[f.estado])}<span class="note" style="${dias(f) > 90 ? 'color:var(--bad);font-weight:500' : ''}">${dias(f)} d</span></span></div>`).join('')}</div>`).join('') : '<div class="panel empty"><b>Nenhum cliente tem material na empresa</b></div>'}
+    </div>`;
+  });
+  ACT.ofiCli = d => go('ficha', { id: d.id });
 
   /* ---------- ações ---------- */
   const fx = id => S.data.fichas.get(id);
@@ -469,6 +533,13 @@ a.btn.pri{color:#fff}
     }, err => { b.disabled = false; toast(err.code === 1 ? 'Sem autorização para a localização. Escreva os km à mão.' : 'Não foi possível obter a localização'); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 });
   };
 
+  ACT.ofiTMan = async d => {
+    const f = fx(d.id); if (!f || !canAct()) return; const h = parseInt($('#ofmh')?.value, 10) || 0, m = parseInt($('#ofmm')?.value, 10) || 0, min = h * 60 + m;
+    if (min <= 0) return toast('Escreva as horas ou os minutos'); if (min > 24 * 60) return toast('Mais de 24 h numa linha? Confirme o tempo.');
+    const dia = $('#ofmd')?.value || TODAY(), ini = new Date(dia + 'T09:00:00').toISOString(), fim = new Date(new Date(ini).getTime() + min * 60000).toISOString();
+    if (await save('fichas_tempos', null, { ficha: f.id, tipo: 'manual', inicio: ini, fim, minutos: min, resp: $('#ofmr')?.value || S.uid || null, notas: 'Tempo escrito à mão' })) toast(fmtMin(min) + ' adicionados');
+  };
+  ACT.ofiTDel = async d => { const t = S.data.fichas_tempos.get(d.id); if (!t || !confirm(`Apagar este tempo (${fmtMin(t.minutos)})?`)) return; if (await remove('fichas_tempos', d.id)) toast('Tempo apagado'); };
   // peças
   ACT.ofiPick = d => { const f = fx(d.id); S.ofPick = { id: d.id, open: true, mod: f?.modelo || '', grp: '', q: '' }; render(); setTimeout(() => $('#ofpq')?.focus(), 50); };
   ACT.ofiPickX = () => { S.ofPick = null; render(); };
@@ -648,9 +719,50 @@ a.btn.pri{color:#fff}
     patch('fichas', f.id, tipo === 'entrada' ? { entradaDocEm: new Date().toISOString() } : { entregaDocEm: new Date().toISOString() });
   };
 
+
+  /* ---------- PDF das fichas (com preços só para o administrador) ---------- */
+  function pagFicha(f, precos, logo) {
+    const e = ent(f.entidade) || {}, v = valores(f), P0 = f.pecas || [], tipoT = f.tipo === 'oficina' ? 'Ficha de reparação' : f.tipo === 'guarda' ? 'Ficha de guarda' : f.tipo === 'manutencao' ? 'Ficha de manutenção' : 'Ficha de assistência';
+    const L = linhasDoc(f, 'entrega').filter(([a]) => a !== 'Referência');
+    const T = tempos(f).filter(t => t.fim).sort((a, b) => (a.inicio || '').localeCompare(b.inicio || ''));
+    return `<section class="pg"><div class="top"><img src="${esc(logo)}" alt=""><div class="ref"><span>${tipoT}</span><b>${esc(cod(f))}</b><span>${esc(estL(f))}${f.faturado ? ' · faturada' : ''}</span></div></div>
+      <table>${L.map(([a, b]) => `<tr><td>${esc(a)}</td><td class="pre">${esc(b)}</td></tr>`).join('')}${f.diagnostico ? `<tr><td>Diagnóstico</td><td class="pre">${esc(f.diagnostico)}</td></tr>` : ''}</table>
+      ${T.length ? `<h2>Tempos</h2><table>${T.map(t => `<tr><td>${t.tipo === 'manual' ? esc(fDY(t.inicio)) + ' (manual)' : esc(fD(t.inicio))}${t.resp ? ' · ' + esc(nameOf(t.resp)) : ''}</td><td class="r">${esc(fmtMin(t.minutos))}</td></tr>`).join('')}<tr><td><b>Total</b></td><td class="r"><b>${esc(fmtMin(v.min))}</b>${v.fmin ? ` · a faturar ${esc(fmtMin(v.fmin))}` : ''}</td></tr></table>` : ''}
+      ${P0.length ? `<h2>Peças aplicadas</h2><table><tr class="h"><td>Código</td><td>Peça</td><td class="r">Qt</td>${precos ? '<td class="r">Preço</td><td class="r">Total</td>' : ''}</tr>${P0.map(p => `<tr><td>${esc(p.ref || '')}</td><td>${esc(p.nome)}</td><td class="r">${esc(String(p.qt).replace('.', ','))}</td>${precos ? `<td class="r">${eur(p.preco)}</td><td class="r">${eur((+p.qt || 0) * (+p.preco || 0))}</td>` : ''}</tr>`).join('')}</table>` : ''}
+      ${precos ? `<h2>Valores (sem IVA)</h2><table><tr><td>Mão de obra · ${esc(fmtMin(v.fmin))} × ${eur(precoH(f))}/h</td><td class="r">${eur(v.mo)}</td></tr>${fora(f) ? `<tr><td>Deslocação${v.desl ? ' · ' + esc(v.desl.txt) : ''}</td><td class="r">${eur(v.desl?.valor || 0)}</td></tr>` : ''}<tr><td>Peças</td><td class="r">${eur(v.pc)}</td></tr><tr><td><b>Total sem IVA</b></td><td class="r"><b>${eur(v.total)}</b></td></tr></table>` : ''}
+      <div class="nota">${esc(nota(f))}</div>
+      ${precos ? '' : '<div class="ass"><div>Técnico</div><div>Cliente</div></div>'}</section>`;
+  }
+  async function abrirPdf(L, precos, titulo) {
+    if (precos && !S.verValores) precos = false;
+    const w = window.open('', '_blank'); if (!w) return toast('O navegador bloqueou a janela. Permita janelas para este site.');
+    let logo = new URL('logo.png', location.href).href; try { const bl = await (await fetch(logo)).blob(); logo = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(bl); }); } catch (_) { }
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>
+      @page{size:A4;margin:14mm}body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:10.5pt;margin:0}
+      .pg{page-break-after:always}.pg:last-child{page-break-after:auto}
+      .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #2F4F94;padding-bottom:8px;margin-bottom:12px}.top img{height:50px}
+      .ref{text-align:right}.ref b{display:block;font-size:18pt;color:#2F4F94}.ref span{display:block;font-size:9pt;color:#555}
+      table{width:100%;border-collapse:collapse}td{padding:5px 4px;border-bottom:1px solid #ddd;vertical-align:top}td:first-child{color:#555;width:32%}tr.h td{font-weight:700;color:#111;border-bottom:1.5px solid #999}
+      td.pre{white-space:pre-wrap}.r{text-align:right;white-space:nowrap}h2{font-size:11.5pt;margin:14px 0 4px}
+      .nota{margin-top:14px;padding:8px 10px;background:#EEF4FB;border-left:4px solid #0090E0;font-size:9.5pt}.ass{display:flex;gap:30px;margin-top:40px}.ass div{flex:1;border-top:1px solid #333;padding-top:6px;font-size:9pt;color:#444}
+      @media screen{body{background:#eee}.pg{background:#fff;max-width:190mm;margin:16px auto;padding:14mm;box-shadow:0 1px 6px rgba(0,0,0,.2)}.b{text-align:center;margin:10px;font:14px Arial}}@media print{.b{display:none}}</style></head><body>
+      <div class="b">${L.length} ficha${L.length > 1 ? 's' : ''} · ${precos ? 'com preços (uso interno)' : 'sem preços'} · <button onclick="print()">Guardar em PDF / Imprimir</button></div>
+      ${L.map(f => pagFicha(f, precos, logo)).join('')}
+      <script>window.onload=()=>setTimeout(()=>print(),300)<\/script></body></html>`);
+    w.document.close();
+  }
+  ACT.ofiPdfLote = d => { const cli = $('#offcli')?.value || ''; const L = D('fichas').filter(f => ['pronto', 'entregue'].includes(f.estado) && !f.faturado && (!cli || f.entidade === cli)).sort((a, b) => a.numero - b.numero); if (!L.length) return toast('Sem fichas'); abrirPdf(L, d.c === '1', `Fichas ${cli ? entName(cli) + ' ' : ''}${TODAY()}`); };
+  ACT.ofiPdfUm = d => {
+    const f = fx(d.id); if (!f) return; if (!S.verValores) return abrirPdf([f], false, 'Ficha ' + cod(f));
+    openSheet(`<div class="sh"><h2>PDF da ficha ${esc(cod(f))}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb"><p class="note" style="margin-top:0">No ecrã de impressão escolha «Guardar como PDF».</p><div class="mgrid">
+      <button data-act="ofiPdfSel" data-id="${f.id}" data-c="1">${ic('euro', 20)}<span>Com preços (interno)</span></button>
+      <button data-act="ofiPdfSel" data-id="${f.id}" data-c="0">${ic('doc', 20)}<span>Sem preços (para o cliente)</span></button></div></div>`);
+  };
+  ACT.ofiPdfSel = d => { closeSheet(); const f = fx(d.id); if (f) abrirPdf([f], d.c === '1', 'Ficha ' + cod(f)); };
+
   /* ---------- exportar para faturar (CSV que abre no Excel) ---------- */
   ACT.ofiExport = () => {
-    const L = D('fichas').filter(f => ['pronto', 'entregue'].includes(f.estado) && !f.faturado).sort((a, b) => a.numero - b.numero); if (!L.length) return toast('Nada por faturar');
+    const cli = $('#offcli')?.value || ''; const L = D('fichas').filter(f => ['pronto', 'entregue'].includes(f.estado) && !f.faturado && (!cli || f.entidade === cli)).sort((a, b) => a.numero - b.numero); if (!L.length) return toast('Nada por faturar');
     const c = v => { v = String(v ?? ''); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }, n = x => (Math.round((+x || 0) * 100) / 100).toString().replace('.', ',');
     const rows = [['Ficha (referência na fatura)', 'Data', 'Cliente', 'NIF', 'Referência', 'Descrição', 'Quantidade', 'Preço unitário s/ IVA', 'IVA %', 'Total s/ IVA']];
     L.forEach(f => {

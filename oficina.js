@@ -235,6 +235,10 @@ a.btn.pri{color:#fff}
 .of-cq img{display:block;width:100%;height:auto}
 .of-pt{position:absolute;transform:translate(-50%,-50%);min-width:26px;height:26px;padding:0 5px;border-radius:13px;border:2px solid var(--brand);background:rgba(255,255,255,.92);color:var(--brand);font-size:12px;font-weight:700;display:grid;place-items:center}
 .of-pt.on{background:var(--brand);color:#fff}
+.of-cq.ed .of-pt{cursor:grab;touch-action:none;border-color:#B45309;color:#B45309}
+.of-cq.ed .of-pt.sel{background:#B45309;color:#fff}
+.of-cq.ed.poe{cursor:crosshair;outline:3px dashed #B45309;outline-offset:-3px}
+.of-edbar{position:sticky;top:calc(env(safe-area-inset-top) + 56px);z-index:5;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:#FFF7ED;border:1px solid #F5C08A;border-radius:10px;padding:8px 10px;margin-top:8px}
 .of-pt i{position:absolute;top:-9px;right:-9px;min-width:18px;height:18px;border-radius:9px;background:var(--ok,#1a7f4b);color:#fff;font-style:normal;font-size:11px;display:grid;place-items:center;padding:0 3px}
 .of-stop{background:var(--bad)!important;border-color:var(--bad)!important;color:#fff!important}
 `;
@@ -647,15 +651,56 @@ a.btn.pri{color:#fff}
   }
   function croquiH(f, c) {
     if (!c) return '';
+    if (S.cqEd?.id === c.id) return croquiEdH(f, c);
     const P = (c.pontos || []).map(ptN);
     const qtd = ref => { const a = porRef(ref); return (f.pecas || []).filter(p => (a && p.artigo === a.id) || nref(p.ref) === nref(ref)).reduce((s, p) => s + (+p.qt || 0), 0); };
     const src = S.cqImg[c.id] || (c.imagem ? croquiUrl(c.imagem) + (c.atualizado ? '?v=' + encodeURIComponent(c.atualizado) : '') : '');
     if (!src) setTimeout(() => desenhaCroqui(c, f), 0);
     const semImg = !src ? `<div class="pb"><p class="note" style="margin:0">${S.cqImg[c.id + ':erro'] ? 'Não foi possível abrir o desenho.' : manPecas(c.modelo) ? 'A preparar o desenho do catálogo…' : `Para ver o desenho, carregue o catálogo de peças do ${esc(c.modelo)} em «Manuais». A lista de números já funciona.`}</p></div>` : '';
     const zoom = S.ofZoom ? ' of-cq-zoom' : '';
-    return `${src ? `<div class="of-row2" style="margin-top:8px"><button class="btn sm" data-act="ofiZoom">${S.ofZoom ? 'Desenho normal' : 'Ampliar desenho'}</button><span class="note">Toque num número para pôr a peça.</span></div><div class="of-cqw${zoom}"><div class="of-cq"><img src="${esc(src)}" alt="Desenho ${esc(c.grupo)}">${P.map(p => { const n = qtd(p.ref); return p.xy.map(([x, y]) => `<button class="of-pt ${n ? 'on' : ''}" style="left:${+x}%;top:${+y}%" data-act="ofiPos" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" data-r="${esc(p.ref)}" title="${esc(p.ref)}">${esc(p.pos)}${n ? `<i>${n}</i>` : ''}</button>`).join(''); }).join('')}</div></div>` : semImg}
+    return `${src ? `<div class="of-row2" style="margin-top:8px"><button class="btn sm" data-act="ofiZoom">${S.ofZoom ? 'Desenho normal' : 'Ampliar desenho'}</button><span class="note" style="flex:1">Toque num número para pôr a peça.</span>${S.isAdmin ? `<button class="btn sm" data-act="ofiCqEd" data-c="${c.id}" data-id="${f.id}">${ic('edit', 16)}Corrigir números</button>` : ''}</div><div class="of-cqw${zoom}"><div class="of-cq"><img src="${esc(src)}" alt="Desenho ${esc(c.grupo)}">${P.map(p => { const n = qtd(p.ref); return p.xy.map(([x, y]) => `<button class="of-pt ${n ? 'on' : ''}" style="left:${+x}%;top:${+y}%" data-act="ofiPos" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" data-r="${esc(p.ref)}" title="${esc(p.ref)}">${esc(p.pos)}${n ? `<i>${n}</i>` : ''}</button>`).join(''); }).join('')}</div></div>` : semImg}
       <table class="tt" style="margin-top:8px"><tbody>${P.map(p => { const a = porRef(p.ref), n = qtd(p.ref); return `<tr data-act="ofiPos" data-id="${f.id}" data-c="${c.id}" data-p="${esc(p.pos)}" data-r="${esc(p.ref)}" style="cursor:pointer"><td style="width:42px"><b>${esc(p.pos)}</b></td><td>${esc(a?.nome || p.ref)}<br><small style="color:var(--ink-3)">${esc(p.ref)}${p.nota ? ' · ' + esc(p.nota) : ''}${p.xy.length ? '' : ' · sem posição no desenho'}</small></td><td class="num">${n ? badge(n + ' na ficha', 'ok') : ''}</td></tr>`; }).join('')}</tbody></table>`;
   }
+
+  /* ---------- editor dos croquis (administrador): arrastar números, pôr os que faltam ---------- */
+  const ptA = p => [p.pos, p.ref, p.xy.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]), ...(p.nota ? [p.nota] : [])];
+  ACT.ofiCqEd = d => { const c = S.data.croquis.get(d.c); if (!c || !S.isAdmin) return; S.ofZoom = true; S.cqEd = { id: c.id, P: (c.pontos || []).map(ptN).map(p => ({ ...p, xy: p.xy.map(v => [...v]) })), sujo: false, poe: null, sel: null }; render(); };
+  function croquiEdH(f, c) {
+    const E = S.cqEd, src = S.cqImg[c.id] || (c.imagem ? croquiUrl(c.imagem) + (c.atualizado ? '?v=' + encodeURIComponent(c.atualizado) : '') : '');
+    if (!src) setTimeout(() => desenhaCroqui(c, f), 0);
+    const falta = E.P.filter(p => !p.xy.length).length, alvo = E.poe != null ? E.P[E.poe] : null;
+    return `<div class="of-edbar"><b style="flex:1">A corrigir · ${esc(c.grupo)}${falta ? ` · ${falta} sem posição` : ' · todos no desenho'}</b>
+      <button class="btn sm" data-act="ofiCqNovo">${ic('plus', 16)}Número novo</button><button class="btn sm" data-act="ofiCqSair">Cancelar</button><button class="btn sm pri" data-act="ofiCqGuardar" ${E.sujo ? '' : 'disabled'}>Guardar</button></div>
+      <p class="note" style="margin:6px 0 0">${alvo ? `<b>Toque no desenho onde fica o n.º ${esc(alvo.pos)}.</b> ` : ''}Arraste um número para o mudar de sítio. Para pôr um que falta, use «Pôr» na lista e toque no desenho.</p>
+      ${src ? `<div class="of-cqw of-cq-zoom"><div class="of-cq ed${alvo ? ' poe' : ''}" id="cq-ed"><img src="${esc(src)}" alt="Desenho ${esc(c.grupo)}" draggable="false">${E.P.map((p, i) => p.xy.map(([x, y], j) => `<span class="of-pt${E.sel === i ? ' sel' : ''}" style="left:${+x}%;top:${+y}%" data-i="${i}" data-j="${j}">${esc(p.pos)}</span>`).join('')).join('')}</div></div>` : '<p class="note">A preparar o desenho…</p>'}
+      <table class="tt" style="margin-top:8px"><tbody>${E.P.map((p, i) => `<tr${E.sel === i ? ' style="background:#FFF7ED"' : ''}><td style="width:42px"><b>${esc(p.pos)}</b></td><td>${esc(porRef(p.ref)?.nome || p.ref)}<br><small style="color:var(--ink-3)">${esc(p.ref)} · ${p.xy.length ? p.xy.length + (p.xy.length > 1 ? ' posições' : ' posição') : '<b style="color:#B45309">sem posição</b>'}</small></td>
+        <td class="num" style="white-space:nowrap"><button class="btn sm${!p.xy.length ? ' pri' : ''}" data-act="ofiCqPoe" data-i="${i}">${p.xy.length ? '+ Pôr outra' : 'Pôr'}</button>${p.xy.length ? ` <button class="btn sm" data-act="ofiCqTira" data-i="${i}" aria-label="Tirar a última posição">Tirar</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
+  }
+  const cqSujo = () => { S.cqEd.sujo = true; render(); };
+  ACT.ofiCqPoe = d => { S.cqEd.poe = +d.i; S.cqEd.sel = +d.i; render(); document.getElementById('cq-ed')?.scrollIntoView({ block: 'center' }); };
+  ACT.ofiCqTira = d => { const p = S.cqEd.P[+d.i]; p.xy.pop(); cqSujo(); };
+  ACT.ofiCqSair = () => { if (S.cqEd?.sujo && !confirm('Sair sem guardar as alterações?')) return; S.cqEd = null; render(); };
+  ACT.ofiCqNovo = () => openSheet(`<div class="sh"><h2>Número novo no desenho</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
+    <div class="fld"><label for="cqn-p">N.º no desenho</label><input id="cqn-p" inputmode="numeric" autocomplete="off"></div>
+    <div class="fld"><label for="cqn-r">Código da peça</label><input id="cqn-r" autocomplete="off"></div>
+    <div class="fld"><label for="cqn-n">Nota (opcional)</label><input id="cqn-n" autocomplete="off"></div>
+    <button class="btn pri" data-act="ofiCqNovoOk">Continuar e tocar no desenho</button></div>`);
+  ACT.ofiCqNovoOk = () => { const v = k => (document.getElementById(k)?.value || '').trim(), pos = v('cqn-p'), ref = v('cqn-r'); if (!pos || !ref) return toast('Escreva o número e o código'); const E = S.cqEd; E.P.push({ pos, ref, xy: [], nota: v('cqn-n') }); E.poe = E.sel = E.P.length - 1; E.sujo = true; closeSheet(); render(); };
+  ACT.ofiCqGuardar = async () => {
+    const E = S.cqEd, P = E.P.map(ptA).sort((a, b) => (parseFloat(a[0]) || 0) - (parseFloat(b[0]) || 0));
+    if (await patch('croquis', E.id, { pontos: P })) { S.cqEd = null; toast('Croqui guardado'); render(); }
+  };
+  // arrastar e tocar no desenho
+  const pct = (el, e) => { const r = el.getBoundingClientRect(); return [Math.min(100, Math.max(0, (e.clientX - r.left) / r.width * 100)), Math.min(100, Math.max(0, (e.clientY - r.top) / r.height * 100))]; };
+  let arr = null;
+  document.addEventListener('pointerdown', e => {
+    const box = e.target.closest?.('#cq-ed'); if (!box || !S.cqEd) return;
+    const pt = e.target.closest('.of-pt');
+    if (pt) { e.preventDefault(); arr = { el: pt, box, i: +pt.dataset.i, j: +pt.dataset.j, mov: false }; pt.setPointerCapture?.(e.pointerId); S.cqEd.sel = arr.i; return; }
+    if (S.cqEd.poe != null) { const [x, y] = pct(box, e); S.cqEd.P[S.cqEd.poe].xy.push([x, y]); S.cqEd.poe = null; cqSujo(); }
+  });
+  document.addEventListener('pointermove', e => { if (!arr) return; const [x, y] = pct(arr.box, e); arr.el.style.left = x + '%'; arr.el.style.top = y + '%'; arr.xy = [x, y]; arr.mov = true; });
+  document.addEventListener('pointerup', () => { if (!arr) return; const a = arr; arr = null; if (a.mov && a.xy) { S.cqEd.P[a.i].xy[a.j] = a.xy; cqSujo(); } else render(); });
   ACT.ofiZoom = () => { S.ofZoom = !S.ofZoom; render(); };
   ACT.ofiCroqui = d => { S.ofCroqui = S.ofCroqui === d.c ? null : d.c; render(); };
   const achaPt = d => { const c = S.data.croquis.get(d.c); if (!c) return {}; const p = (c.pontos || []).map(ptN).find(x => x.pos === String(d.p) && (!d.r || x.ref === d.r)); return { c, p }; };

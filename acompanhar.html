@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Acompanhar reparação · Mundicacau</title>
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--ink:#1D1D1F;--ink2:#6E6E73;--line:#E5E5EA;--box:#F2F4F8;--brand:#2F4F94;--azul:#0090E0;--ok:#1A7F4B;--bad:#B3261E}
+*{box-sizing:border-box}
+html,body{margin:0;background:#fff;color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:520px;margin:0 auto;padding:22px 16px 70px}
+.marca{display:flex;align-items:center;gap:10px}
+.marca img{height:34px}
+.rule{height:2px;width:44px;background:var(--azul);margin:14px 0 16px;border-radius:2px}
+h1{font-size:24px;line-height:1.2;margin:0 0 4px;color:var(--brand)}
+p{font-size:15px;line-height:1.5;margin:0 0 10px}
+.sub{color:var(--ink2);font-size:14px}
+.card{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:16px 0}
+.card h2{font-size:15px;margin:0 0 10px;color:var(--brand)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:14px}
+.kv span{color:var(--ink2)}
+.passos{list-style:none;margin:0;padding:0}
+.passos li{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:15px;color:var(--ink2)}
+.passos li i{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);flex:none;display:grid;place-items:center;font-style:normal;font-size:13px;color:#fff}
+.passos li.feito{color:var(--ink)} .passos li.feito i{background:var(--ok);border-color:var(--ok)}
+.passos li.agora{color:var(--brand);font-weight:600} .passos li.agora i{border-color:var(--azul);background:var(--azul)}
+.fotos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.fotos a{display:block;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--box)}
+.fotos img{width:100%;height:100%;object-fit:cover;display:block}
+.valor{font-size:28px;font-weight:700;color:var(--brand);margin:4px 0 2px}
+input,textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;font:inherit;font-size:16px;color:var(--ink)}
+textarea{min-height:70px;resize:vertical}
+label{display:block;font-size:13px;color:var(--ink2);margin:10px 0 6px}
+.btns{display:flex;gap:10px;margin-top:12px}
+.btn{flex:1;min-height:52px;border-radius:12px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink)}
+.btn.pri{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn:disabled{opacity:.5;cursor:default}
+.aviso{background:var(--box);border-radius:12px;padding:12px 14px;font-size:14px}
+.aviso.ok{background:#E8F5EE;color:var(--ok)} .aviso.bad{background:#FDECEA;color:var(--bad)}
+.erro{color:var(--bad);font-size:14px;margin:8px 0 0;min-height:1em}
+footer{margin-top:28px;padding-top:12px;border-top:1px solid var(--line);font-size:13px;color:var(--ink2);line-height:1.6}
+footer a{color:var(--ink2)}
+.testes{position:fixed;left:0;right:0;bottom:0;background:#E8710A;color:#fff;text-align:center;font-size:12px;font-weight:600;padding:5px 0 calc(5px + env(safe-area-inset-bottom));letter-spacing:.04em}
+</style>
+</head>
+<body>
+<main>
+  <div class="marca"><img src="logo.png" alt="Mundicacau"></div>
+  <div class="rule"></div>
+  <div id="app"><p class="sub">A carregar…</p></div>
+  <footer>Mundicacau · Oficina e assistência técnica<br><a href="mailto:oficina@mundicacau.exemplo">oficina@mundicacau.exemplo</a></footer>
+</main>
+<div class="testes">VERSÃO DE TESTES · dados fictícios</div>
+<script src="config.js"></script>
+<script>
+(function () {
+  const C = window.CRM_CONFIG, H = { apikey: C.anonKey, Authorization: 'Bearer ' + C.anonKey, 'Content-Type': 'application/json' };
+  const app = document.getElementById('app');
+  const t = new URLSearchParams(location.search).get('t') || '';
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fD = d => d ? new Date(d).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  const eur = v => Number(v || 0).toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' });
+  const rpc = (fn, body) => fetch(C.url + '/rest/v1/rpc/' + fn, { method: 'POST', headers: H, body: JSON.stringify(body) }).then(r => r.ok ? r.json() : Promise.reject(r.status));
+  const msg = h => { app.innerHTML = h; };
+  if (!/^[0-9a-f-]{36}$/i.test(t)) return msg('<h1>Link incompleto</h1><p class="sub">Abra o link completo que recebeu por email ou WhatsApp.</p>');
+
+  const FORA = ['local', 'manutencao', 'reparacao'];
+  function passos(f) {
+    const fora = FORA.includes(f.tipo);
+    const L = fora ? [['recebido', 'Pedido registado'], ['reparacao', 'Em assistência'], ['pronto', 'Concluído']]
+      : [['recebido', 'Recebido na oficina'], ['diagnostico', 'Em diagnóstico'], ['orcamento', 'Orçamento'], ['reparacao', 'Em reparação'], ['pronto', 'Pronto a levantar'], ['entregue', 'Entregue']];
+    const mapa = { aguarda_peca: 'reparacao' }, e = mapa[f.estado] || f.estado;
+    let i = L.findIndex(x => x[0] === e); if (i < 0) i = fora && e === 'entregue' ? L.length - 1 : 0;
+    const extra = f.estado === 'aguarda_peca' ? ' · à espera de peça' : '';
+    return '<ul class="passos">' + L.map(([, n], j) => `<li class="${j < i || (j === i && ['pronto', 'entregue'].includes(e)) ? 'feito' : j === i ? 'agora' : ''}"><i>${j < i || (j === i && ['pronto', 'entregue'].includes(e)) ? '✓' : ''}</i>${esc(n)}${j === i ? esc(extra) : ''}</li>`).join('') + '</ul>';
+  }
+  async function fotos(f) {
+    const el = document.getElementById('fotos'); if (!el || !f.fotos.length) return;
+    const urls = await Promise.all(f.fotos.slice(0, 12).map(p => fetch(C.url + '/storage/v1/object/sign/fichas/' + p.split('/').map(encodeURIComponent).join('/'), { method: 'POST', headers: H, body: JSON.stringify({ expiresIn: 3600 }) }).then(r => r.ok ? r.json() : null).then(j => j && (j.signedURL || j.signedUrl) ? C.url + '/storage/v1' + (j.signedURL || j.signedUrl) : null).catch(() => null)));
+    const ok = urls.filter(Boolean); el.innerHTML = ok.length ? ok.map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="Foto" loading="lazy"></a>`).join('') : '<p class="sub">Não foi possível mostrar as fotos.</p>';
+  }
+  function orcH(f) {
+    const o = f.orc; if (!o) return '';
+    if (o.estado === 'enviado') return `<div class="card" id="orc"><h2>Orçamento para aprovar</h2>${o.valor != null ? `<div class="valor">${eur(o.valor)}</div><p class="sub">Valor sem IVA</p>` : ''}${o.notas ? `<p>${esc(o.notas)}</p>` : ''}
+      <label for="nm">O seu nome</label><input id="nm" autocomplete="name" maxlength="120">
+      <label for="nt">Observações (opcional)</label><textarea id="nt" maxlength="500"></textarea>
+      <div class="btns"><button class="btn" id="nao">Recusar</button><button class="btn pri" id="sim">Aceitar orçamento</button></div><p class="erro" id="er"></p></div>`;
+    return `<div class="card"><h2>Orçamento</h2>${o.valor != null ? `<div class="valor">${eur(o.valor)}</div>` : ''}<div class="aviso ${o.estado === 'aceite' ? 'ok' : 'bad'}">${o.estado === 'aceite' ? 'Aceite' : 'Recusado'}${o.resp_nome ? ' por ' + esc(o.resp_nome) : ''}${o.resp_em ? ' a ' + fD(o.resp_em) : ''}.</div></div>`;
+  }
+  async function carrega() {
+    let f; try { f = await rpc('ficha_publica', { t }); } catch (e) { return msg('<h1>Sem ligação</h1><p class="sub">Não foi possível abrir a ficha. Tente outra vez daqui a pouco.</p>'); }
+    if (!f) return msg('<h1>Ficha não encontrada</h1><p class="sub">O link pode estar errado ou já não estar ativo.</p>');
+    if (f.erro) return msg('<h1>Acompanhamento indisponível</h1><p class="sub">Para saber como está a sua reparação, contacte-nos.</p>');
+    document.title = 'Ficha ' + (f.codigo || f.numero) + ' · ' + (f.empresa || 'Mundicacau');
+    const eq = [f.equipamento, [f.marca, f.modelo].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
+    msg(`<h1>Ficha ${esc(f.codigo || f.numero)}</h1><p class="sub">${esc(f.cliente || '')}</p>
+      <div class="card"><h2>Estado</h2>${f.estado === 'cancelado' ? '<div class="aviso bad">Trabalho cancelado.</div>' : passos(f)}${f.estado === 'pronto' && !FORA.includes(f.tipo) ? '<div class="aviso ok" style="margin-top:10px">Já pode levantar. Traga este link ou o código da ficha.</div>' : ''}</div>
+      ${orcH(f)}
+      <div class="card"><h2>Equipamento</h2><div class="kv">${eq ? `<span>O quê</span><b>${esc(eq)}</b>` : ''}${f.n_serie ? `<span>N.º de série</span><b>${esc(f.n_serie)}</b>` : ''}<span>${FORA.includes(f.tipo) ? 'Pedido' : 'Entrada'}</span><b>${fD(f.entrada)}</b>${f.pronto_em ? `<span>Pronto</span><b>${fD(f.pronto_em)}</b>` : ''}${f.entregue_em ? `<span>Entregue</span><b>${fD(f.entregue_em)}</b>` : ''}${f.avaria ? `<span>Avaria</span><b>${esc(f.avaria)}</b>` : ''}${f.trabalho ? `<span>Trabalho feito</span><b>${esc(f.trabalho)}</b>` : ''}</div></div>
+      ${f.fotos.length ? '<div class="card"><h2>Fotos</h2><div class="fotos" id="fotos"><p class="sub">A carregar…</p></div></div>' : ''}`);
+    fotos(f);
+    const sim = document.getElementById('sim'), nao = document.getElementById('nao');
+    const responde = async ok => {
+      const nome = document.getElementById('nm').value.trim(), er = document.getElementById('er');
+      if (!nome) { er.textContent = 'Escreva o seu nome.'; return; }
+      if (!ok && !confirm('Recusar o orçamento?')) return;
+      sim.disabled = nao.disabled = true; er.textContent = '';
+      try { const r = await rpc('ficha_resposta', { t, aceita: ok, nome, nota: document.getElementById('nt').value }); if (r && r.ok) return carrega(); er.textContent = r && r.erro === 'ja_respondido' ? 'Este orçamento já tinha resposta.' : 'Não foi possível enviar. Tente outra vez.'; }
+      catch (e) { er.textContent = 'Sem ligação. Tente outra vez.'; }
+      sim.disabled = nao.disabled = false;
+    };
+    if (sim) { sim.onclick = () => responde(true); nao.onclick = () => responde(false); }
+  }
+  carrega();
+})();
+</script>
+</body>
+</html>

@@ -4,7 +4,7 @@
    orçamento opcional, avisos ao cliente (email e WhatsApp), agrupamento de trabalhos iguais,
    rota do dia (do mais longe para o mais perto) e exportação para faturar. */
 window.OFI_INIT = function () {
-  const NOVAS = ['tecnicos', 'tempos_padrao', 'kits', 'planos', 'manuais', 'croquis', 'locais', 'fichas', 'fichas_tempos', 'modelos', 'desl_tabelas', 'oficina_config'];
+  const NOVAS = ['empresas', 'tecnicos', 'tempos_padrao', 'kits', 'planos', 'manuais', 'croquis', 'locais', 'fichas', 'fichas_tempos', 'modelos', 'desl_tabelas', 'oficina_config'];
   NOVAS.forEach(c => { if (!COLS.includes(c)) COLS.push(c); S.data[c] = new Map(); });
 
   const EST = { recebido: 'Recebido', diagnostico: 'Em diagnóstico', orcamento: 'Orçamento enviado', aguarda_peca: 'À espera de peça', reparacao: 'Em reparação', pronto: 'Pronto', entregue: 'Entregue', cancelado: 'Cancelado' };
@@ -33,14 +33,24 @@ window.OFI_INIT = function () {
   const PLANOS = { base: ['Base', []], profissional: ['Profissional', ['fora', 'ativos', 'armazenamento', 'stock', 'garantias', 'link']], empresa: ['Empresa', MODS.map(m => m[0])] };
   const temMod = k => (cfg().modulos || {})[k] !== false;
   const VMOD = { rotaof: 'fora', ativos: 'ativos', encomendarp: 'stock', stock: 'stock', equip: 'garantias', equipum: 'garantias', planear: 'planeamento', tempos: 'planeamento', tecnicosof: 'rendimento' };
-  SO_VALORES.push('modulos');
-  window.MODV = v => !VMOD[v] || temMod(VMOD[v]);
-  const cfg = () => S.data.oficina_config.get(1) || { empresa: 'Mundicacau', precoHora: 30, precoKm: 0.4, idaVolta: true, baseLat: 41.19025117241961, baseLng: -8.450665245494452 };
+  SO_VALORES.push('modulos', 'marca');
+  window.MODV = v => v === 'empresas' ? !!S.super : (!VMOD[v] || temMod(VMOD[v]));
+  /* ---------- empresa (várias empresas na mesma base) e marca ---------- */
+  const emp = () => (S.data.empresas && cfg().empresaId && S.data.empresas.get(cfg().empresaId)) || {};
+  const logoUrl = () => emp().logo || new URL('logo.png', location.href).href;
+  let marcaFeita = '';
+  function aplicaMarca() {
+    const e = emp(); if (!e.id) return; const k = [e.id, e.nome, e.logo, e.cor, e.cor2, e.email].join('|'); if (k === marcaFeita) return; marcaFeita = k;
+    const r = document.documentElement.style; if (e.cor) r.setProperty('--gold', e.cor); if (e.cor2) r.setProperty('--brand', e.cor2);
+    document.querySelectorAll('img.brandlogo').forEach(i => { i.src = e.logo || 'logo.png'; i.alt = e.nome; });
+    document.title = e.nome + ' · TESTE'; window.EMP_NOME = e.nome; try { if (e.email) GERAL = e.email; } catch (_) { }
+  }
+  const cfg = () => (S.data.oficina_config && S.data.oficina_config.values().next().value) || { empresa: 'Mundicacau', precoHora: 30, precoKm: 0.4, idaVolta: true, baseLat: 41.19025117241961, baseLng: -8.450665245494452 };
   const prop = f => f.proprietario || entName(f.entidade);
   const loc = f => f.local ? S.data.locais.get(f.local) : null;
   const ondeXY = f => { const l = loc(f); if (l && l.lat && l.lng) return { lat: l.lat, lng: l.lng }; const e = ent(f.entidade); return e && e.lat && e.lng ? { lat: e.lat, lng: e.lng } : null; };
   const ondeTxt = f => { const l = loc(f); return l ? [l.nome, [l.morada, l.cp, l.localidade].filter(Boolean).join(', ')].filter(Boolean).join(' · ') : ''; };
-  const cod = f => f.codigo || (f.numero ? 'MC-' + String(f.numero).padStart(4, '0') : 'Nova · por enviar');
+  const cod = f => f.codigo || (f.numero ? (emp().prefixo || 'OF') + '-' + String(f.numero).padStart(4, '0') : 'Nova · por enviar');
   const nomeEq = f => [f.equipamento, f.modelo ? ((f.marca ? f.marca + ' ' : '') + f.modelo) : ''].filter(Boolean).join(' · ');
   const fmtMin = m => { m = Math.round(m || 0); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min'; };
   const fmtKm = k => (+k || 0).toLocaleString('pt-PT', { maximumFractionDigits: 1 });
@@ -72,7 +82,7 @@ window.OFI_INIT = function () {
   /* ---------- valores ---------- */
   let TIDX = null;
   const tidx = () => { if (!TIDX) { TIDX = new Map(); D('fichas_tempos').forEach(t => { if (!TIDX.has(t.ficha)) TIDX.set(t.ficha, []); TIDX.get(t.ficha).push(t); }); } return TIDX; };
-  const r0 = render; render = (...a) => { TIDX = null; return r0(...a); };
+  const r0 = render; render = (...a) => { TIDX = null; const x = r0(...a); try { aplicaMarca(); if (!S._sv && S.me && S.db) { verSuper(); S._sv = 1; } } catch (_) { } return x; };
   const tempos = f => tidx().get(f.id) || [];
   const TECS = () => D('tecnicos').filter(t => t.ativo !== false).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
   const tecNome = id => S.data.tecnicos.get(id)?.nome || '';
@@ -137,11 +147,11 @@ window.OFI_INIT = function () {
   for (let i = NAV.length - 1; i >= 0; i--) if (tirar.includes(NAV[i][0])) NAV.splice(i, 1);
   for (let i = NAV.length - 1; i >= 0; i--) if (['maquinas', 'mapa'].includes(NAV[i][0])) NAV.splice(i, 1);
   NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['planear', 'Planear trabalho', 'cal'], ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route'], ['ativos', 'Ativos dos clientes', 'box'], ['equip', 'Máquinas (n.º de série)', 'tool']);
-  const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['encomendarp', 'Peças a encomendar', 'box'], ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro'], ['modulos', 'Plano e módulos', 'grid']);
+  const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['encomendarp', 'Peças a encomendar', 'box'], ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro'], ['modulos', 'Plano e módulos', 'grid'], ['marca', 'Empresa e marca', 'edit'], ['empresas', 'Empresas (superadmin)', 'users']);
   for (let i = NAV.length - 1; i > 0; i--) if (NAV[i][0] === 'sep' && (NAV[i - 1][0] === 'sep' || i === NAV.length - 1)) NAV.splice(i, 1);
   SO_VALORES.push('ofcfg', 'tecnicosof');
   TABS.splice(0, TABS.length, ['inicio', 'Início', 'home'], ['meudia', 'O meu dia', 'clock'], ['oficina', 'Oficina', 'tool'], ['clientes', 'Clientes', 'users'], ['mais', 'Mais', 'menu']);
-  Object.assign(TITLES, { modulos: 'Plano e módulos', equip: 'Máquinas por n.º de série', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
+  Object.assign(TITLES, { marca: 'Empresa e marca', empresas: 'Empresas', modulos: 'Plano e módulos', equip: 'Máquinas por n.º de série', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
   Object.defineProperty(TITLES, 'ofi', { get() { const f = S.data.fichas.get(S.params?.id); return f ? 'Ficha ' + cod(f) : 'Ficha'; } });
   const nc0 = navCounts; navCounts = () => ({ ...nc0(), oficina: D('fichas').filter(f => f.tipo !== 'guarda' && ABERTOS.includes(f.estado)).length });
 
@@ -491,7 +501,7 @@ a.btn.pri{color:#fff}
         ${D('desl_tabelas').map(t => `<div class="fg" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;align-items:end;margin-bottom:10px"><div class="fld"><label>Nome</label><input data-dtn="${t.id}" value="${esc(t.nome)}"></div><div class="fld"><label>Escalões</label><input data-dte="${t.id}" value="${esc(escTxt(t.escaloes))}"></div><button class="btn" data-act="ofTabSave" data-id="${t.id}">Guardar</button></div><p class="note" style="margin:-4px 0 14px">${D('entidades').filter(e => e.deslTabela === t.id).length} clientes usam esta tabela</p>`).join('')}
         ${S.canWrite ? '<button class="btn" data-act="ofTabNew">' + ic('plus', 16) + 'Nova tabela</button>' : ''}</div></div></div>`;
   });
-  ACT.ofCfgSave = async () => { const n = id => { const x = $('#' + id).value; return x === '' ? null : parseFloat(x); }; if (await patch('oficina_config', 1, { precoHora: n('cf-ph'), precoKm: n('cf-pk'), blocoMin: n('cf-bl') || 30, toleranciaMin: n('cf-tol') ?? 5, minimoForaMin: n('cf-mf') ?? 60, minimoOficinaMin: n('cf-mo') ?? 30, garantiaDias: n('cf-gar') || 30, garantiaMaqNovaDias: n('cf-garn') || 365, garantiaMaqUsadaDias: n('cf-garu') || 180, armModo: $('#cf-am').value, armInicio: $('#cf-ai').value || null, armGratis: n('cf-ag') ?? 0, armAvisoDias: n('cf-aav') ?? 3, armPrecoMaq: n('cf-apm'), armPrecoPeca: n('cf-app'), baseLat: n('cf-lat'), baseLng: n('cf-lng'), idaVolta: $('#cf-iv').checked })) toast('Guardado'); };
+  ACT.ofCfgSave = async () => { const n = id => { const x = $('#' + id).value; return x === '' ? null : parseFloat(x); }; if (await patch('oficina_config', cfg().id, { precoHora: n('cf-ph'), precoKm: n('cf-pk'), blocoMin: n('cf-bl') || 30, toleranciaMin: n('cf-tol') ?? 5, minimoForaMin: n('cf-mf') ?? 60, minimoOficinaMin: n('cf-mo') ?? 30, garantiaDias: n('cf-gar') || 30, garantiaMaqNovaDias: n('cf-garn') || 365, garantiaMaqUsadaDias: n('cf-garu') || 180, armModo: $('#cf-am').value, armInicio: $('#cf-ai').value || null, armGratis: n('cf-ag') ?? 0, armAvisoDias: n('cf-aav') ?? 3, armPrecoMaq: n('cf-apm'), armPrecoPeca: n('cf-app'), baseLat: n('cf-lat'), baseLng: n('cf-lng'), idaVolta: $('#cf-iv').checked })) toast('Guardado'); };
   ACT.ofTabSave = async d => { const nome = $(`[data-dtn="${d.id}"]`).value.trim(), L = parseEsc($(`[data-dte="${d.id}"]`).value); if (!nome || !L.length) return toast('Falta o nome ou os escalões'); if (await patch('desl_tabelas', d.id, { nome, escaloes: L })) toast('Tabela guardada'); };
   ACT.ofTabNew = async () => { await save('desl_tabelas', null, { nome: 'Nova tabela', escaloes: [{ ate: 40, valor: 30 }, { ate: 70, valor: 50 }, { ate: 150, valor: 90 }] }); };
 
@@ -920,7 +930,7 @@ a.btn.pri{color:#fff}
     const f = fx(d.id); if (!f) return; const tipo = d.c, w = window.open('', '_blank'); if (!w) return toast('O navegador bloqueou a janela. Permita janelas para este site.');
     let qr = ''; try { await loadQR(); const q = qrcode(0, 'M'); q.addData(urlF(f.id)); q.make(); qr = q.createSvgTag({ cellSize: 3, margin: 0, scalable: true }); } catch (_) { }
     const titulo = tipo === 'entrada' ? 'Comprovativo de entrada' : (f.tipo === 'oficina' ? 'Guia de entrega' : 'Folha de serviço'), P0 = f.pecas || [];
-    let logo = new URL('logo.png', location.href).href; try { const bl = await (await fetch(logo)).blob(); logo = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(bl); }); } catch (_) { }
+    let logo = logoUrl(); try { const bl = await (await fetch(logo)).blob(); logo = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(bl); }); } catch (_) { }
     const assUrl = f.assinatura ? (await urlsLongas([f.assinatura], 3600))[f.assinatura] : '';
     const assin = tipo === 'entrada' ? ['Entregue pelo cliente', 'Recebido por ' + esc(cfg().empresa)] : ['Entregue por ' + esc(cfg().empresa), 'Recebido pelo cliente'];
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${titulo} ${esc(cod(f))}</title><style>
@@ -962,7 +972,7 @@ a.btn.pri{color:#fff}
   async function abrirPdf(L, precos, titulo) {
     if (precos && !S.verValores) precos = false;
     const w = window.open('', '_blank'); if (!w) return toast('O navegador bloqueou a janela. Permita janelas para este site.');
-    let logo = new URL('logo.png', location.href).href; try { const bl = await (await fetch(logo)).blob(); logo = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(bl); }); } catch (_) { }
+    let logo = logoUrl(); try { const bl = await (await fetch(logo)).blob(); logo = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(bl); }); } catch (_) { }
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>
       @page{size:A4;margin:14mm}body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:10.5pt;margin:0}
       .pg{page-break-after:always}.pg:last-child{page-break-after:auto}
@@ -1335,11 +1345,65 @@ a.btn.pri{color:#fff}
       <div class="panel"><div class="ph"><h2>Módulos</h2></div>${MODS.filter(m => !m[3]).map(linha).join('')}</div>
       <div class="panel"><div class="ph"><h2>Integrações</h2></div>${MODS.filter(m => m[3]).map(linha).join('')}<div class="pb"><p class="note" style="margin:0">As integrações ligam-se por empresa quando houver os dados de cada uma (conta do Sage, email e número de WhatsApp da empresa).</p></div></div></div>`;
   });
-  const gravaMods = async (modulos, plano) => { if (await patch('oficina_config', 1, { modulos, plano })) toast('Plano atualizado'); };
+  const gravaMods = async (modulos, plano) => { if (await patch('oficina_config', cfg().id, { modulos, plano })) toast('Plano atualizado'); };
   ACT.ofiPlano = d => { const L = PLANOS[d.c][1]; gravaMods(Object.fromEntries(MODS.map(([k]) => [k, L.includes(k)])), d.c); };
   document.addEventListener('change', e => { const k = e.target?.dataset?.ofmod; if (!k || !S.isAdmin) return; const m = { ...Object.fromEntries(MODS.map(([x]) => [x, temMod(x)])), [k]: e.target.checked }; const pl = Object.entries(PLANOS).find(([, [, L]]) => MODS.every(([x]) => m[x] === L.includes(x))); gravaMods(m, pl ? pl[0] : 'medida'); });
   // ecrãs de módulos desligados
   Object.keys(VMOD).forEach(v => { const f0 = VIEWS[v]; if (!f0) return; VIEWS[v] = (...a) => temMod(VMOD[v]) ? f0(...a) : `<div class="pg"><div class="panel empty"><b>Módulo não incluído no plano</b>${S.isAdmin ? '<button class="btn" data-act="go" data-v="modulos">Ver plano e módulos</button>' : 'Fale com o administrador.'}</div></div>`; });
+
+  /* ---------- marca da empresa (administrador) ---------- */
+  VIEWS.marca = () => loadingOr(() => {
+    const e = emp(); if (!S.isAdmin) return '<div class="panel empty"><b>Só o administrador muda a marca</b></div>';
+    const f = (k, l, t = 'text', ex = '') => `<div class="fld"><label for="em-${k}">${l}</label><input id="em-${k}" type="${t}" value="${esc(e[k] ?? '')}" ${ex}></div>`;
+    return `<div class="pg"><div class="panel"><div class="ph"><h2>Empresa</h2></div><div class="pb"><div class="frm">
+      ${f('nome', 'Nome')}${f('nif', 'NIF', 'text', 'inputmode="numeric"')}${f('email', 'Email (vai nas mensagens e no link do cliente)', 'email')}${f('telefone', 'Telefone', 'tel')}${f('morada', 'Morada')}
+      <div class="fld"><label>Prefixo das fichas</label><input value="${esc(e.prefixo || '')}" disabled><span class="note">Ex.: ${esc(e.prefixo || 'MC')}-2026-0001. Só o superadministrador muda.</span></div></div></div></div>
+      <div class="panel"><div class="ph"><h2>Marca</h2></div><div class="pb"><div class="frm">
+      <div class="fld"><label for="em-cor">Cor principal</label><input id="em-cor" type="color" value="${esc(e.cor || '#0090E0')}"></div>
+      <div class="fld"><label for="em-cor2">Cor secundária</label><input id="em-cor2" type="color" value="${esc(e.cor2 || '#2F4F94')}"></div>
+      <div class="fld" style="grid-column:1/-1"><label>Logótipo</label><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><img src="${esc(e.logo || 'logo.png')}" alt="" style="height:56px;max-width:220px;object-fit:contain;border:1px solid var(--line);border-radius:8px;padding:6px;background:#fff"><label class="btn sm">${ic('plus', 16)}Mudar logótipo<input type="file" accept="image/png,image/jpeg,image/svg+xml" data-emlogo="1" hidden></label></div><span class="note">Aparece na app, nas guias, nos PDF e no link do cliente. De preferência PNG com fundo transparente.</span></div>
+      </div></div></div>
+      <div><button class="btn pri" data-act="empGuardar">Guardar</button></div></div>`;
+  });
+  ACT.empGuardar = async () => { const v = k => ($('#em-' + k)?.value || '').trim(); if (!v('nome')) return toast('Falta o nome'); if (await patch('empresas', emp().id, { nome: v('nome'), nif: v('nif') || null, email: v('email') || null, telefone: v('telefone') || null, morada: v('morada') || null, cor: v('cor'), cor2: v('cor2') })) { if (cfg().id) patch('oficina_config', cfg().id, { empresa: v('nome') }); toast('Guardado'); } };
+  document.addEventListener('change', async e => {
+    if (!e.target?.dataset?.emlogo) return; const fl = e.target.files?.[0]; if (!fl) return; if (fl.size > 2e6) return toast('O logótipo tem de ter menos de 2 MB');
+    const ext = (fl.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z]/g, ''), path = `${emp().id}/logo-${Date.now()}.${ext}`;
+    const { error } = await S.db.storage.from('marcas').upload(path, fl, { contentType: fl.type, upsert: true }); if (error) { console.warn(error); return toast('Não foi possível enviar o logótipo'); }
+    const url = S.db.storage.from('marcas').getPublicUrl(path).data.publicUrl; if (await patch('empresas', emp().id, { logo: url })) toast('Logótipo atualizado');
+  });
+
+  /* ---------- painel do superadministrador: empresas ---------- */
+  S.super = false;
+  const verSuper = async () => { try { const { data } = await S.db.rpc('eh_super'); S.super = !!data; } catch (_) { } if (S.super) render(); };
+  VIEWS.empresas = () => {
+    if (!S.super) return '<div class="panel empty"><b>Só o superadministrador</b></div>';
+    if (!S.empL) { S.db.rpc('lista_empresas').then(({ data, error }) => { S.empL = error ? [] : data || []; render(); }); return '<div class="pg"><p class="note">A carregar…</p></div>'; }
+    const atual = emp().id;
+    return `<div class="pg"><div class="tb"><div class="tbr"><span class="note" style="flex:1">Cada empresa só vê os seus dados. Está a ver: <b>${esc(emp().nome || '')}</b></span><button class="btn pri" data-act="empNova">${ic('plus', 16)}Nova empresa</button></div></div>
+      <div class="panel">${S.empL.map(x => `<div class="row"><span class="rt"><span class="r1">${esc(x.nome)} · ${esc(x.prefixo)}</span><span class="r2">Plano ${esc(x.plano || '—')} · ${x.membros} ${x.membros == 1 ? 'utilizador' : 'utilizadores'} · ${x.fichas} fichas${x.email ? ' · ' + esc(x.email) : ''}</span></span><span class="rr">${x.id === atual ? badge('A ver agora', 'ok') : `<button class="btn sm" data-act="empUsar" data-id="${x.id}">Entrar</button>`}</span></div>`).join('')}</div></div>`;
+  };
+  ACT.empNova = () => openSheet(`<div class="sh"><h2>Nova empresa</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
+    <div class="fld"><label for="ne-nome">Nome da empresa</label><input id="ne-nome"></div>
+    <div class="fld"><label for="ne-pre">Prefixo das fichas (1 a 6 letras/números)</label><input id="ne-pre" maxlength="6" style="text-transform:uppercase" placeholder="Ex.: ABC"></div>
+    <div class="fld"><label for="ne-nif">NIF</label><input id="ne-nif" inputmode="numeric"></div>
+    <div class="fld"><label for="ne-em">Email geral da empresa</label><input id="ne-em" type="email"></div>
+    <div class="fld"><label for="ne-pl">Plano</label><select id="ne-pl"><option value="base">Base</option><option value="profissional">Profissional</option><option value="empresa" selected>Empresa</option></select></div>
+    <div class="fld"><label for="ne-an">Nome do administrador</label><input id="ne-an"></div>
+    <div class="fld"><label for="ne-ae">Email do administrador (entra com este email)</label><input id="ne-ae" type="email"></div>
+    <button class="btn pri" data-act="empCriar">Criar empresa</button></div>`);
+  ACT.empCriar = async (d, b) => {
+    const v = k => ($('#' + k)?.value || '').trim(); b.disabled = true;
+    const { error } = await S.db.rpc('criar_empresa', { p_nome: v('ne-nome'), p_prefixo: v('ne-pre').toUpperCase(), p_admin_email: v('ne-ae'), p_admin_nome: v('ne-an') || null, p_plano: v('ne-pl'), p_email: v('ne-em') || null, p_nif: v('ne-nif') || null });
+    b.disabled = false; if (error) return toast(error.message || 'Não foi possível criar');
+    closeSheet(); toast('Empresa criada. O administrador já pode entrar com o email dele.'); S.empL = null; render();
+  };
+  ACT.empUsar = async d => {
+    if (window.OFF && (await OFF.contaFila()) > 0) return toast('Há alterações por enviar. Ligue-se à rede e espere que sejam enviadas.');
+    const { error } = await S.db.rpc('usar_empresa', { p_empresa: d.id }); if (error) return toast(error.message);
+    try { await new Promise(ok => { const r = indexedDB.deleteDatabase('oficina-offline'); r.onsuccess = r.onerror = r.onblocked = () => ok(); }); } catch (_) { }
+    location.reload();
+  };
   /* ---------- relógio e QR lido pela câmara ---------- */
   setInterval(() => { const el = document.getElementById('ofcrono'); if (!el || !el.dataset.ini) return; const s = Math.max(0, Math.floor((Date.now() - new Date(el.dataset.ini)) / 1000)); el.textContent = pad(Math.floor(s / 3600)) + ':' + pad(Math.floor(s / 60) % 60) + ':' + pad(s % 60); }, 1000);
   const abreHash = () => { const m = location.hash.match(/^#f=([0-9a-f-]{36})$/); if (!m) return; let n = 0; const t = () => { if (S.uid && S.ready.fichas) { history.replaceState(null, '', location.pathname); go('ofi', { id: m[1] }); } else if (n++ < 300) setTimeout(t, 300); }; t(); };

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="referrer" content="no-referrer">
-<title>Acompanhar reparação · Mundicacau</title>
+<title>Acompanhar reparação</title>
 <link rel="icon" href="icon-192.png">
 <style>
 :root{--ink:#1D1D1F;--ink2:#6E6E73;--line:#E5E5EA;--box:#F2F4F8;--brand:#2F4F94;--azul:#0090E0;--ok:#1A7F4B;--bad:#B3261E}
@@ -48,10 +48,10 @@ footer a{color:var(--ink2)}
 </head>
 <body>
 <main>
-  <div class="marca"><img src="logo.png" alt="Mundicacau"></div>
+  <div class="marca"><img id="lg" src="logo.png" alt=""></div>
   <div class="rule"></div>
   <div id="app"><p class="sub">A carregar…</p></div>
-  <footer>Mundicacau · Oficina e assistência técnica<br><a href="mailto:oficina@mundicacau.exemplo">oficina@mundicacau.exemplo</a></footer>
+  <footer id="ft"></footer>
 </main>
 <div class="testes">VERSÃO DE TESTES · dados fictícios</div>
 <script src="config.js"></script>
@@ -94,7 +94,10 @@ footer a{color:var(--ink2)}
     let f; try { f = await rpc('ficha_publica', { t }); } catch (e) { return msg('<h1>Sem ligação</h1><p class="sub">Não foi possível abrir a ficha. Tente outra vez daqui a pouco.</p>'); }
     if (!f) return msg('<h1>Ficha não encontrada</h1><p class="sub">O link pode estar errado ou já não estar ativo.</p>');
     if (f.erro) return msg('<h1>Acompanhamento indisponível</h1><p class="sub">Para saber como está a sua reparação, contacte-nos.</p>');
-    document.title = 'Ficha ' + (f.codigo || f.numero) + ' · ' + (f.empresa || 'Mundicacau');
+    document.title = 'Ficha ' + (f.codigo || f.numero) + ' · ' + (f.empresa || '');
+    const rs = document.documentElement.style; if (f.cor) rs.setProperty('--azul', f.cor); if (f.cor2) rs.setProperty('--brand', f.cor2);
+    if (f.logo) document.getElementById('lg').src = f.logo; document.getElementById('lg').alt = f.empresa || '';
+    document.getElementById('ft').innerHTML = esc(f.empresa || '') + ' · Oficina e assistência técnica' + (f.empresa_email ? `<br><a href="mailto:${esc(f.empresa_email)}">${esc(f.empresa_email)}</a>` : '') + (f.empresa_tel ? ` · ${esc(f.empresa_tel)}` : '');
     const eq = [f.equipamento, [f.marca, f.modelo].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
     msg(`<h1>Ficha ${esc(f.codigo || f.numero)}</h1><p class="sub">${esc(f.cliente || '')}</p>
       <div class="card"><h2>Estado</h2>${f.estado === 'cancelado' ? '<div class="aviso bad">Trabalho cancelado.</div>' : passos(f)}${f.estado === 'pronto' && !FORA.includes(f.tipo) ? '<div class="aviso ok" style="margin-top:10px">Já pode levantar. Traga este link ou o código da ficha.</div>' : ''}</div>

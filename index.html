@@ -315,6 +315,24 @@ table.tt{width:100%;border-collapse:collapse;font-size:13.5px}
 .nv button.on{box-shadow:inset 2px 0 0 var(--gold)}
 .tog input{accent-color:var(--brand)}
 </style>
+<script>
+/* App Android (Capacitor): as guias, PDF e etiquetas abrem num painel dentro da app em vez de numa janela nova */
+(function(){
+  const nativo = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const orig = window.open.bind(window);
+  window.open = function (url, alvo, feat) {
+    if (!nativo() || (url && url !== 'about:blank')) return orig(url, alvo, feat);
+    const box = document.createElement('div');
+    box.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fff;display:flex;flex-direction:column';
+    box.innerHTML = '<div style="display:flex;gap:8px;align-items:center;padding:calc(env(safe-area-inset-top) + 8px) 12px 8px;border-bottom:1px solid #ddd;background:#f6f7f9"><b style="flex:1;font:600 15px system-ui">Documento</b><button style="min-height:40px;padding:0 16px;border-radius:10px;border:1px solid #ccc;background:#fff;font:600 15px system-ui">Fechar</button></div><iframe style="flex:1;border:0;width:100%"></iframe>';
+    document.body.appendChild(box);
+    box.querySelector('button').onclick = () => box.remove();
+    const w = box.querySelector('iframe').contentWindow;
+    let n = 0; w.print = () => n++ && alert('Para imprimir ou guardar em PDF, use a app no navegador do computador ou o Chrome do telemóvel. A impressão direta na app Android chega numa próxima versão.');
+    return w;
+  };
+})();
+</script>
 </head>
 <body><div style="position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#B26B00;color:#fff;font:600 12px/1.6 system-ui,sans-serif;text-align:center;pointer-events:none">VERSÃO DE TESTES · dados fictícios</div>
 
@@ -633,7 +651,7 @@ function renderShell(){
  const showBack=S.view==='ficha'||(S.view!=='inicio'&&innerWidth<960);
  $('#back').hidden=!showBack;$('#back').innerHTML=ic('back',22);
  $('#ttl').textContent=S.view==='ficha'?(ent(S.params.id)?.nome||'Cliente'):TITLES[S.view]||'';
- $('#eyb').textContent=S.view==='ficha'?(ESTADOS[ent(S.params.id)?.estado]||'Cliente'):'Mundicacau';
+ $('#eyb').textContent=S.view==='ficha'?(ESTADOS[ent(S.params.id)?.estado]||'Cliente'):(window.EMP_NOME||'Mundicacau');
  $('#topai').innerHTML=ic('spark',21);$('#topai').hidden=!S.sample||S.view==='assistente';
  $('#fab').innerHTML=ic('plus',26);$('#fab').hidden=!S.db||!S.canWrite||S.view==='assistente';
  const me=S.me;$('#meav').innerHTML=me?`<img src="${esc(me.avatarUrl)}" alt="">`:'';
@@ -1054,7 +1072,7 @@ async function aiRun(prompt,{phone}={}){
   if(phone&&$('#aican')?.value==='WhatsApp'){wa.href=`https://wa.me/${waNum(phone)}?text=${encodeURIComponent(text)}`;wa.hidden=false}else wa.hidden=true;
  }catch(e){if($('#aiout'))$('#aiout').textContent=e.text?e.text+'\n\n'+aiErr(e):aiErr(e)}
  finally{$('#aibox')?.querySelectorAll('button').forEach(b=>b.disabled=false)}}
-const assin=()=>{const n=(S.me?.name||'').trim();return !n||/coronel/i.test(n)?'Mundicacau':n+' · Mundicacau'};
+const assin=()=>{const n=(S.me?.name||'').trim();return !n||/coronel/i.test(n)?(window.EMP_NOME||'Mundicacau'):n+' · '+(window.EMP_NOME||'Mundicacau')};
 
 /* --- assistente com ferramentas --- */
 function compact(col,d){const o={id:d.id};for(const[k,v]of Object.entries(d)){if(['id','atualizado','por','criadoPor','foto','exemplo'].includes(k)||v===''||v==null)continue;if(k==='entidade')o.cliente=entName(v);else if(k==='linhas'){o.artigos=(v||[]).map(l=>l.qt+'x '+l.nome).join(', ');o.total=Math.round(docTotal(d)*100)/100}else if(k==='resp')o.responsavel=nameOf(v);else if(k==='tipos')o.tipos=v.map(x=>TIPOS[x]);else if(k==='estado'&&col==='pagamentos')o.estado=EST_PAG[v];else if(k==='relatorio'||k==='notas'||k==='descricao')o[k]=String(v).slice(0,300);else o[k]=v}return o}
@@ -1252,7 +1270,7 @@ async function uploadFoto(file){const ext=((file.name||'').split('.').pop()||'jp
 
 /* --- Claude através da função "claude" do Supabase --- */
 function parseJ(t){t=String(t||'').trim();try{return JSON.parse(t)}catch(_){}const f=t.match(/```(?:json)?\s*([\s\S]*?)```/);if(f){try{return JSON.parse(f[1])}catch(_){}}const i=Math.min(...['{','['].map(c=>{const k=t.indexOf(c);return k<0?1e9:k})),j=Math.max(t.lastIndexOf('}'),t.lastIndexOf(']'));if(i<1e9&&j>i)return JSON.parse(t.slice(i,j+1));throw new Error('no json')}
-const GERAL='oficina@mundicacau.exemplo'; // TODO: email real da Mundicacau
+let GERAL='oficina@mundicacau.exemplo'; // TODO: email real da Mundicacau
 function encMail(x){const e=ent(x.entidade)||{};const em=String(e.email||'').split(/[;,\s]+/).find(v=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v))||'';
  const t=totais(x.linhas),nome=e.nome||'Cliente',num=e.codigoXd?` · Cliente n.º ${e.codigoXd}`:'',cab=`Cliente: ${nome}${e.codigoXd?` (n.º ${e.codigoXd})`:''}`;
  const linhas=(x.linhas||[]).map(l=>`- ${l.qt} × ${l.nome}: ${eur(l.preco)}${+l.desc?` (desconto ${l.desc}%)`:''} = ${eur(lineBase(l))}`).join('\n');

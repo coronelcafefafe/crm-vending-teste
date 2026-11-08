@@ -401,7 +401,9 @@ a.btn.pri{color:#fff}
     // assinatura do cliente
     h += `<div class="panel"><div class="ph"><h2>Assinatura do cliente</h2>${f.assinadoEm ? `<span class="note">${fD(f.assinadoEm)}</span>` : ''}</div><div class="pb">
       ${f.assinatura ? `<div style="border:1px solid var(--line);border-radius:10px;background:#fff;max-width:420px">${imgF(f.assinatura, 'Assinatura', 'style="display:block;width:100%;height:auto"')}</div><p class="note" style="margin:6px 0 10px">${esc(f.assinadoNome || '')}</p>` : '<p class="note" style="margin:0 0 10px">Ainda não assinada. Peça ao cliente para assinar no ecrã quando levantar o material ou no fim da assistência.</p>'}
-      ${ro ? '' : `<button class="btn ${f.assinatura ? '' : 'pri'}" data-act="ofiAss" data-id="${f.id}">${ic('edit', 16)}${f.assinatura ? 'Assinar de novo' : 'Recolher assinatura'}</button>`}</div></div>`;
+      <div class="of-row2" style="flex-wrap:wrap">${ro ? '' : `<button class="btn ${f.assinatura ? '' : 'pri'}" data-act="ofiAss" data-id="${f.id}">${ic('edit', 16)}${f.assinatura ? 'Assinar de novo' : 'Recolher assinatura'}</button>`}
+      ${f.tipo !== 'guarda' ? `<button class="btn ${f.assinatura ? 'pri' : ''}" data-act="ofiDoc" data-id="${f.id}" data-c="entrega">${ic('print', 16)}Imprimir ${f.tipo === 'oficina' ? 'guia de entrega' : 'folha de serviço'}${f.assinatura ? ' assinada' : ''}</button>` : ''}
+      <button class="btn" data-act="ofiDoc" data-id="${f.id}" data-c="entrada">${ic('print', 16)}Imprimir comprovativo de entrada</button></div></div></div>`;
 
     // diagnóstico e trabalho
     h += `<div class="panel"><div class="ph"><h2>Diagnóstico e trabalho feito</h2></div><div class="pb"><div class="fg">
@@ -636,7 +638,7 @@ a.btn.pri{color:#fff}
     if (error) { b.disabled = false; console.warn(error); return toast('Não foi possível guardar a assinatura'); }
     const old = f.assinatura; await patch('fichas', f.id, { assinatura: path, assinadoNome: nome, assinadoEm: new Date().toISOString() });
     if (old) S.db.storage.from('fichas').remove([old]);
-    closeSheet(); toast('Assinatura guardada'); if (d.c === 'guia') setTimeout(() => ACT.ofiDocMenu({ id: f.id, c: 'entrega' }), 150);
+    closeSheet(); toast('Assinatura guardada'); if (f.tipo !== 'guarda') setTimeout(() => ACT.ofiDocMenu({ id: f.id, c: 'entrega' }), 150);
   };
   ACT.ofiTMan = async d => {
     const f = fx(d.id); if (!f || !canAct()) return; const h = parseInt($('#ofmh')?.value, 10) || 0, m = parseInt($('#ofmm')?.value, 10) || 0, min = h * 60 + m;
@@ -910,9 +912,9 @@ a.btn.pri{color:#fff}
     openSheet(`<div class="sh"><h2>${titulo}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
       <p class="note" style="margin-top:0">${tipo === 'entrada' ? 'Entregue ao cliente quando deixa o material. Leva a referência que depois aparece na fatura.' : 'O cliente leva isto quando levanta: diz o que foi feito e que peças levou. A fatura segue depois com a mesma referência.'}</p>
       <pre style="white-space:pre-wrap;font:inherit;background:var(--surface-2);border-radius:10px;padding:12px;margin:0">${esc(m.texto)}</pre></div>
-      <div class="sf">${tipo !== 'entrada' && S.canWrite ? `<button class="btn ${f.assinatura ? '' : 'pri'}" data-act="ofiAss" data-id="${f.id}" data-c="guia">${ic('edit', 16)}${f.assinatura ? 'Assinado ✓' : 'Assinatura do cliente'}</button>` : ''}<button class="btn" data-act="ofiDoc" data-id="${f.id}" data-c="${tipo}">${ic('print', 16)}Imprimir</button><span class="grow"></span>
+      <div class="sf">${tipo !== 'entrada' && S.canWrite ? `<button class="btn ${f.assinatura ? '' : 'pri'}" data-act="ofiAss" data-id="${f.id}" data-c="guia">${ic('edit', 16)}${f.assinatura ? 'Assinado ✓' : 'Assinatura do cliente'}</button>` : ''}<button class="btn${tipo === 'entrada' || f.assinatura ? ' pri' : ''}" data-act="ofiDoc" data-id="${f.id}" data-c="${tipo}">${ic('print', 16)}Imprimir${tipo !== 'entrada' && f.assinatura ? ' (com assinatura)' : ''}</button><span class="grow"></span>
       <a class="btn" ${em ? '' : 'style="opacity:.45;pointer-events:none"'} data-act="mailgo" data-ofmark="doc-${tipo}" data-id="${f.id}" href="${esc(`mailto:${em}?subject=${encodeURIComponent(m.assunto)}&body=${encodeURIComponent(m.texto)}`)}">${ic('mail', 16)}Email</a>
-      <a class="btn pri" ${e.telemovel ? '' : 'style="opacity:.45;pointer-events:none"'} data-act="mailgo" data-ofmark="doc-${tipo}" data-id="${f.id}" href="${esc(`https://wa.me/${waNum(e.telemovel)}?text=${encodeURIComponent(m.texto)}`)}" target="_blank" rel="noopener">${ic('wa', 16)}WhatsApp</a></div>`);
+      <a class="btn" ${e.telemovel ? '' : 'style="opacity:.45;pointer-events:none"'} data-act="mailgo" data-ofmark="doc-${tipo}" data-id="${f.id}" href="${esc(`https://wa.me/${waNum(e.telemovel)}?text=${encodeURIComponent(m.texto)}`)}" target="_blank" rel="noopener">${ic('wa', 16)}WhatsApp</a></div>`);
   };
   ACT.ofiDoc = async d => {
     const f = fx(d.id); if (!f) return; const tipo = d.c, w = window.open('', '_blank'); if (!w) return toast('O navegador bloqueou a janela. Permita janelas para este site.');

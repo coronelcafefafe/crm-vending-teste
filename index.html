@@ -1237,10 +1237,12 @@ function refreshProfiles(){}
 const HAT=()=>$('.logo .hat')?.getAttribute('src')||'';
 function avatarFor(n){return 'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="#F2F2F4"/><text x="20" y="25" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="13" letter-spacing="1" fill="#1D1D1F">${esc(initials(n||'?'))}</text></svg>`)}
 const fotoUrl=p=>!p?'':/^https?:\/\//.test(p)?p:S.db?S.db.storage.from('artigos').getPublicUrl(p).data.publicUrl:'';
-VIEWS.login=()=>`<div class="authbox"><img class="brandlogo" src="logo.png" alt="Mundicacau"><h1 class="authh">Entrar no CRM.</h1>
- ${S.otpSent?`<p class="note" style="margin:0">Enviámos um email para <b>${esc(S.loginEmail)}</b>. Abra o link nesse email neste aparelho para entrar. Depois defina a sua palavra-passe em Equipa e conta.</p>
+VIEWS.login=()=>`<div class="authbox"><img class="brandlogo" src="logo.png" alt="Mundicacau"><h1 class="authh">Entrar.</h1>
+ ${S.otpSent?`<p class="note" style="margin:0">Enviámos um email para <b>${esc(S.loginEmail)}</b>. Abra o link desse email para entrar. Se o email trouxer um código, pode escrevê-lo aqui.</p>
+  <div class="fld"><label for="otp">Código do email</label><input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10" onkeydown="if(event.key==='Enter')document.querySelector('[data-act=otpOk]').click()"></div><button class="btn pri" data-act="otpOk">Entrar com o código</button>
+  <p class="note" style="margin:0">Na primeira entrada vai-lhe ser pedido que crie a sua palavra-passe. Depois entra sempre com email e palavra-passe, também na app Android.</p>
   <button class="btn" data-act="otpBack">Voltar</button>`
- :`<div class="fld"><label for="lgemail">Email</label><input id="lgemail" type="email" autocomplete="username" value="${esc(S.loginEmail||'')}"></div><div class="fld"><label for="lgpass">Palavra-passe</label><input id="lgpass" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')document.querySelector('[data-act=pwLogin]').click()"></div><button class="btn pri" data-act="pwLogin">Entrar</button><button class="btn" data-act="otpSend">Primeira vez ou esqueceu a palavra-passe? Receber link por email</button>`}
+ :`<div class="fld"><label for="lgemail">Email</label><input id="lgemail" type="email" autocomplete="username" value="${esc(S.loginEmail||'')}"></div><div class="fld"><label for="lgpass">Palavra-passe</label><input id="lgpass" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')document.querySelector('[data-act=pwLogin]').click()"></div><button class="btn pri" data-act="pwLogin">Entrar</button><button class="btn" data-act="otpSend">Primeira vez ou esqueceu a palavra-passe? Receber email de acesso</button>`}
  <p class="err" id="lgerr"></p></div>`;
 VIEWS.semacesso=()=>`<div class="authbox"><img class="brandlogo" src="logo.png" alt="Mundicacau"><h1 class="authh">Ainda sem acesso.</h1><p class="note" style="margin:0">O email ${esc(S.loginEmail||'')} não está na equipa do CRM. Peça ao administrador para o adicionar.</p><button class="btn" data-act="logout">Sair</button></div>`;
 function equipaH(){
@@ -1257,7 +1259,7 @@ Object.assign(ACT,{
  pwLogin:async(d,b)=>{const em=($('#lgemail')?.value||'').trim().toLowerCase(),pw=$('#lgpass')?.value||'';if(!/^\S+@\S+\.\S+$/.test(em)||!pw){$('#lgerr').textContent='Escreva o email e a palavra-passe.';return}b.disabled=true;S.loginEmail=em;
   const{data,error}=await S.db.auth.signInWithPassword({email:em,password:pw});b.disabled=false;
   if(error){$('#lgerr').textContent=/confirm/i.test(error.message)?'Este email ainda não foi confirmado. Peça o link por email.':'Email ou palavra-passe errados. Se ainda não definiu palavra-passe, peça o link por email.';return}start(data.session)},
- pwSet:async(d,b)=>{const a=$('#pw1')?.value||'',c=$('#pw2')?.value||'';if(a.length<8)return toast('A palavra-passe deve ter pelo menos 8 caracteres.');if(a!==c)return toast('As duas palavras-passe não são iguais.');b.disabled=true;const{error}=await S.db.auth.updateUser({password:a});b.disabled=false;if(error)return toast('Não foi possível guardar: '+error.message);$('#pw1').value='';$('#pw2').value='';toast('Palavra-passe guardada. Já pode entrar com email e palavra-passe.')},
+ pwSet:async(d,b)=>{const a=$('#pw1')?.value||'',c=$('#pw2')?.value||'';if(a.length<8)return toast('A palavra-passe deve ter pelo menos 8 caracteres.');if(a!==c)return toast('As duas palavras-passe não são iguais.');b.disabled=true;const{error}=await S.db.auth.updateUser({password:a,data:{tem_pass:true}});b.disabled=false;if(error)return toast('Não foi possível guardar: '+(/same|different/i.test(error.message)?'escolha uma palavra-passe diferente da anterior.':/weak|short|characters/i.test(error.message)?'a palavra-passe é demasiado fraca.':error.message));S.temPass=true;$('#pw1').value='';$('#pw2').value='';render();toast('Palavra-passe guardada. Já pode entrar com email e palavra-passe.')},
  logout:async()=>{try{await S.db.auth.signOut()}catch(_){}location.reload()},
  addMembro:async(d,b)=>{const nome=$('#nm-nome').value.trim(),email=$('#nm-email').value.trim().toLowerCase(),papel0=$('#nm-papel').value,papel=papel0==='total'?'membro':papel0,acesso_total=papel0==='total';if(!nome||!/^\S+@\S+\.\S+$/.test(email))return toast('Preencha o nome e um email válido.');b.disabled=true;const{error}=await S.db.from('membros').insert({nome,email,papel,acesso_total});b.disabled=false;if(error)return toast(error.code==='23505'?'Esse email já está na equipa.':'Não foi possível adicionar.');toast('Adicionado à equipa');loadTeam()},
  rmMembro:async(d,b)=>{if(!b.dataset.armed){b.dataset.armed=1;b.textContent='Confirmar';return}const{error}=await S.db.from('membros').delete().eq('email',d.c);if(error)return toast('Não foi possível remover.');toast('Removido da equipa');loadTeam()},
@@ -1355,7 +1357,7 @@ async function start(session){
  const{data:m,error}=await S.db.rpc('ligar_membro');
  if(error||!m||!m.email){started=false;S.view='semacesso';S.loginEmail=session.user.email;render();return}
  S.uid=session.user.id;S.canWrite=m.papel!=='leitura';S.isAdmin=m.papel==='admin';S.verValores=m.papel==='admin'||!!m.acesso_total;
- S.me={name:m.nome||session.user.email,email:m.email,avatarUrl:avatarFor(m.nome||session.user.email)};
+ S.temPass=!!session.user.user_metadata?.tem_pass;S.me={name:m.nome||session.user.email,email:m.email,avatarUrl:avatarFor(m.nome||session.user.email)};
  S.view='inicio';S.hist=[];render();
  await loadTeam();
  await Promise.all(COLS.map(c=>loadTable(c).catch(e=>{console.warn(c,e);S.ready[c]=true})));

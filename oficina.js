@@ -186,6 +186,7 @@ window.OFI_INIT = function () {
     { k: 'estado', l: 'Estado', t: 'sel', o: EST, req: 1, def: 'recebido' },
     { k: 'entidade', l: 'Cliente', t: 'ent', req: 1, full: 1 },
     { k: 'proprietario', l: 'Proprietário da peça (sai na etiqueta) · vazio = nome do cliente', t: 'text', full: 1 },
+    { k: 'recebidaEm', l: 'Recebida em', t: 'date', def: '@today' },
     { k: 'equipamento', l: 'O que entrou (escolha ou escreva, ex.: Módulo copos) · uma ficha por peça ou máquina', t: 'text', req: 1, def: 'Máquina completa' },
     { k: 'marca', l: 'Marca', t: 'text', def: 'Necta' },
     { k: 'modelo', l: 'Modelo da máquina', t: 'sel', get o() { return modelosL(); } },
@@ -199,7 +200,7 @@ window.OFI_INIT = function () {
     { k: 'localTelefone', l: 'Telefone do local', t: 'tel' },
     { k: 'avaria', l: 'Avaria / o que o cliente pediu', t: 'area', full: 1 },
     { k: 'tecnico', l: 'Técnico', t: 'sel', get o() { return Object.fromEntries(TECS().map(t => [t.id, t.nome])); } },
-    { k: 'prevista', l: 'Data prometida ao cliente', t: 'date' },
+    { k: 'prevista', l: 'Data acordada com o cliente', t: 'date' },
     { k: 'precoHora', l: 'Preço/hora só desta ficha (€) · vazio = do cliente', t: 'num', so: 1 },
     { k: 'notas', l: 'Notas internas', t: 'area', full: 1 },
   ];
@@ -217,7 +218,19 @@ window.OFI_INIT = function () {
   // ao editar um local, mostra as coordenadas no campo
   const edit0 = ACT.edit; ACT.edit = (d, b, e) => { if (d.col === 'locais') { const l = S.data.locais.get(d.id); if (l) l.coords = l.lat != null ? `${l.lat}, ${l.lng}` : ''; } return edit0(d, b, e); };
   const of0 = openForm;
-  openForm = (col, id, preset) => { const r = of0(col, id, preset); if (col === 'fichas') { const i = document.getElementById('f-equipamento'); if (i && !document.getElementById('of-eqL')) { i.setAttribute('list', 'of-eqL'); i.setAttribute('autocomplete', 'off'); i.insertAdjacentHTML('afterend', `<datalist id="of-eqL">${[...new Set([...EQUIP, ...D('fichas').map(f => f.equipamento).filter(Boolean)])].map(x => `<option value="${esc(x)}">`).join('')}</datalist>`); } } return r; };
+  const LOCF = ['localNome', 'localMorada', 'localCp', 'localCidade', 'localCoords', 'localTelefone'];
+  function ajustaFormFicha(id) {
+    const sel = document.getElementById('f-tipo'); if (!sel) return;
+    const rc = document.getElementById('f-recebidaEm'), ex = id && S.data.fichas.get(id);
+    if (rc && ex && ex.entrada) rc.value = ex.entrada.slice(0, 10);
+    const pv = document.querySelector('label[for="f-prevista"]');
+    const tg = () => { const fora = ['local', 'manutencao', 'reparacao'].includes(sel.value);
+      LOCF.forEach(k => { const el = document.getElementById('f-' + k)?.closest('.fld'); if (el) el.style.display = fora ? '' : 'none'; });
+      const r2 = rc?.closest('.fld'); if (r2) r2.style.display = fora ? 'none' : '';
+      if (pv) pv.textContent = fora ? 'Data marcada com o cliente' : 'Data acordada com o cliente (entrega)'; };
+    sel.addEventListener('change', tg); tg();
+  }
+  openForm = (col, id, preset) => { const r = of0(col, id, preset); if (col === 'fichas') { try { ajustaFormFicha(id); } catch (_) { }  const i = document.getElementById('f-equipamento'); if (i && !document.getElementById('of-eqL')) { i.setAttribute('list', 'of-eqL'); i.setAttribute('autocomplete', 'off'); i.insertAdjacentHTML('afterend', `<datalist id="of-eqL">${[...new Set([...EQUIP, ...D('fichas').map(f => f.equipamento).filter(Boolean)])].map(x => `<option value="${esc(x)}">`).join('')}</datalist>`); } } return r; };
   // depois de criar uma ficha, abre-a (fotos, etiqueta, cronómetro)
   const save0 = save;
   save = async (col, id, vals) => {
@@ -226,6 +239,10 @@ window.OFI_INIT = function () {
     }
     if (col === 'fichas' && vals) {
       const T = k => String(vals[k] || '').trim();
+      const foraT = ['local', 'manutencao', 'reparacao'].includes(vals.tipo || (id && S.data.fichas.get(id)?.tipo));
+      if (!foraT) ['localNome', 'localMorada', 'localCp', 'localCidade', 'localCoords', 'localTelefone'].forEach(k => delete vals[k]);
+      const rec = T('recebidaEm'); delete vals.recebidaEm;
+      if (rec && !foraT) { const ant = id ? (S.data.fichas.get(id)?.entrada || '').slice(0, 10) : ''; if (rec !== ant) vals.entrada = rec === TODAY() && !id ? new Date().toISOString() : new Date(rec + 'T12:00').toISOString(); }
       const ln = T('localNome'), lv = { morada: T('localMorada'), cp: T('localCp'), localidade: T('localCidade'), coords: T('localCoords'), telefone: T('localTelefone') };
       ['localNome', 'localMorada', 'localCp', 'localCidade', 'localCoords', 'localTelefone'].forEach(k => delete vals[k]);
       if (ln && vals.entidade) {

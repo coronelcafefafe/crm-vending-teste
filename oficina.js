@@ -591,7 +591,7 @@ a.btn.pri{color:#fff}
       h += `${S.canWrite ? `<div><button class="btn sm" data-act="new" data-col="locais" data-preset='${pre({})}'>${ic('plus', 16)}Novo local</button></div>` : ''}<div class="panel">${LS.length ? LS.map(x => `<div class="row" role="button" tabindex="0" data-act="${S.canWrite ? 'edit' : 'noop'}" data-col="locais" data-id="${x.id}"><span class="rt"><span class="r1">${esc(x.nome)}</span><span class="r2">${esc([[x.morada, x.cp, x.localidade].filter(Boolean).join(', '), x.contacto, x.telefone].filter(Boolean).join(' · '))}</span></span><span class="rr">${x.lat == null ? badge('Sem coordenadas', 'warn') : ''}${badge(D('fichas').filter(f => f.local === x.id).length + ' fichas')}</span></div>`).join('') : '<div class="empty"><b>Sem locais</b>Registe os clientes deste cliente onde estão as máquinas.</div>'}</div>`;
     }
     if (tab === 'encomendas') {
-      h += `${S.canWrite ? `<div><button class="btn sm" data-act="new" data-col="encomendas" data-preset='${pre({})}'>${ic('plus', 16)}Venda de peças / consumíveis</button></div>` : ''}${enc.length ? `<div class="panel">${enc.sort((a, b) => (b.data || '').localeCompare(a.data || '')).map(encRow).join('')}</div>` : '<div class="panel empty"><b>Sem vendas</b></div>'}`;
+      h += `${S.canWrite ? `<div><button class="btn sm" data-act="new" data-col="encomendas" data-preset='${pre({})}'>${ic('plus', 16)}Venda de consumíveis</button></div>` : ''}${enc.length ? `<div class="panel">${enc.sort((a, b) => (b.data || '').localeCompare(a.data || '')).map(encRow).join('')}</div>` : '<div class="panel empty"><b>Sem vendas</b></div>'}`;
     }
     return h + '</div>';
   };
@@ -625,12 +625,12 @@ a.btn.pri{color:#fff}
   ACT.quick = () => {
     const eid = S.view === 'ficha' ? S.params.id : null, pre = o => esc(JSON.stringify(Object.assign(eid ? { entidade: eid } : {}, o)));
     openSheet(`<div class="sh"><h2>Criar${eid ? ' para ' + esc(entName(eid)) : ''}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb"><div class="mgrid">
-      <button data-act="ofiNew" data-preset='${pre({ tipo: 'oficina' })}'>${ic('tool', 20)}<span>Entrada na oficina</span></button>
+      <button data-act="ofiNew" data-preset='${pre({ tipo: 'oficina' })}'>${ic('tool', 20)}<span>Assistência na oficina</span></button>
       ${temMod('fora') ? `<button data-act="ofiNew" data-preset='${pre({ tipo: 'local' })}'>${ic('pin', 20)}<span>Assistência no cliente</span></button>` : ''}
-      <button data-act="ofiNew" data-preset='${pre({ tipo: 'manutencao' })}'>${ic('repeat', 20)}<span>Manutenção</span></button>
+      ${eid ? '' : `<button data-act="ofiNew" data-preset='{"tipo":"interna","equipamento":"Caldeira"}'>${ic('swap', 20)}<span>Ficha interna (material da casa)</span></button>`}
       ${eid ? '' : `<button data-act="new" data-col="entidades">${ic('users', 20)}<span>Cliente</span></button>`}
+      <button data-act="new" data-col="encomendas" ${eid ? `data-preset='${pre({})}'` : ''}>${ic('box', 20)}<span>Venda de consumíveis</span></button>
       <button data-act="new" data-col="tarefas" ${eid ? `data-preset='${pre({})}'` : ''}>${ic('cal', 20)}<span>Tarefa</span></button>
-      <button data-act="new" data-col="encomendas" ${eid ? `data-preset='${pre({})}'` : ''}>${ic('box', 20)}<span>Venda de peças / consumíveis</span></button>
     </div></div>`);
   };
 

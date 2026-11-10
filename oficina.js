@@ -9,11 +9,12 @@ window.OFI_INIT = function () {
 
   const EST = { recebido: 'Recebido', diagnostico: 'Em diagnóstico', orcamento: 'Orçamento enviado', aguarda_peca: 'À espera de peça', reparacao: 'Em reparação', pronto: 'Pronto', entregue: 'Entregue', cancelado: 'Cancelado' };
   const EST_T = { recebido: 'info', diagnostico: 'warn', orcamento: 'gold', aguarda_peca: 'bad', reparacao: 'warn', pronto: 'ok', entregue: 'mute', cancelado: 'mute' };
-  const TIPO = { oficina: 'Oficina (entrou cá)', guarda: 'Guarda (só armazenamento)', local: 'Assistência no cliente', manutencao: 'Manutenção', reparacao: 'Reparação no cliente' };
-  const TIPO_C = { oficina: 'Oficina', guarda: 'Guarda', local: 'No cliente', manutencao: 'Manutenção', reparacao: 'Reparação' };
+  const TIPO = { oficina: 'Oficina (entrou cá)', guarda: 'Guarda (só armazenamento)', local: 'Assistência no cliente', manutencao: 'Manutenção', reparacao: 'Reparação no cliente', transporte: 'Transporte / troca de máquina', interna: 'Revisão interna (material da casa)' };
+  const TIPO_C = { oficina: 'Oficina', guarda: 'Guarda', local: 'No cliente', manutencao: 'Manutenção', reparacao: 'Reparação', transporte: 'Transporte', interna: 'Interna' };
   const EQUIP = ['Máquina completa', 'Caldeira', 'Grupo café Z2000', 'Grupo café Z3000', 'Moinho doseador', 'Módulo copos', 'Placa eletrónica', 'Moedeiro / sistema de pagamento', 'Bomba', 'Misturador', 'Distribuidor de copos'];
   const ABERTOS = ['recebido', 'diagnostico', 'orcamento', 'aguarda_peca', 'reparacao'];
-  const fora = f => ['local', 'manutencao', 'reparacao'].includes(f.tipo);
+  const FORA_T = ['local', 'manutencao', 'reparacao', 'transporte'];
+  const fora = f => FORA_T.includes(f.tipo);
   const naCasa = f => ['oficina', 'guarda'].includes(f.tipo) && !['entregue', 'cancelado'].includes(f.estado);
   const ESPERA = ['recebido', 'aguarda_peca', 'orcamento'], CURSO = ['diagnostico', 'reparacao'];
   const estL = f => f.tipo === 'guarda' && f.estado === 'recebido' ? 'Guardado' : EST[f.estado] || f.estado;
@@ -122,10 +123,16 @@ window.OFI_INIT = function () {
   }
   function valores(f) {
     const min = minutos(f), fmin = faturaMin(f, min), mo = fmin / 60 * precoH(f);
-    const d = fora(f) && f.km != null ? deslCalc(ent(f.entidade), f.km) : null;
+    let d = fora(f) && f.km != null ? deslCalc(ent(f.entidade), f.km) : null;
+    // visitas anteriores («não resolvido, voltar cá»): cobra-se a deslocação só quando a culpa foi do cliente
+    const VS = f.visitas || [], vCob = VS.filter(x => x.culpa === 'cliente').length, vPend = VS.filter(x => !x.culpa).length;
+    if (d && VS.length) d = { valor: d.valor * (1 + vCob), txt: d.txt + (VS.length ? ` × ${1 + vCob} ${1 + vCob === 1 ? 'visita' : 'visitas'} cobrada${1 + vCob === 1 ? '' : 's'}${VS.length - vCob - vPend ? ` (${VS.length - vCob - vPend} não cobrada${VS.length - vCob - vPend === 1 ? '' : 's'})` : ''}` : ''), unit: d.valor, n: 1 + vCob };
+    // peças revistas (trocas): tempo fixo da revisão ao preço/hora do cliente + peças da revisão
+    const TR = f.trocas || [], trMin = TR.reduce((s, x) => s + (+x.min || 0), 0), trMo = trMin / 60 * precoH(f), trPc = TR.reduce((s, x) => s + (x.pecas || []).reduce((a, p) => a + (+p.qt || 0) * (+p.preco || 0), 0), 0);
     const pc = (f.pecas || []).reduce((s, p) => s + (+p.qt || 0) * (+p.preco || 0), 0);
-    const arm = armCalc(f), total = (f.emGarantia ? 0 : mo + (d?.valor || 0) + pc) + (arm?.valor || 0);
-    return { min, fmin, mo, desl: d, pc, arm, total, custoGar: f.emGarantia ? mo + (d?.valor || 0) + pc : 0 };
+    const base = mo + (d?.valor || 0) + pc + trMo + trPc;
+    const arm = armCalc(f), total = (f.emGarantia || f.tipo === 'interna' ? 0 : base) + (arm?.valor || 0);
+    return { min, fmin, mo, desl: d, pc, arm, trMin, trMo, trPc, vPend, total, custo: base, custoGar: f.emGarantia ? base : 0 };
   }
 
   /* ---------- distância ---------- */
@@ -137,6 +144,7 @@ window.OFI_INIT = function () {
   }
 
   /* ---------- navegação, títulos, formulários ---------- */
+  P.swap = P.swap || 'M7 7h11l-3-3M17 17H6l3 3';
   P.qr = P.qr || 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2z';
   P.cam = 'M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8';
   P.clock = 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 7v5l3 2';
@@ -146,12 +154,12 @@ window.OFI_INIT = function () {
   const tirar = ['leads', 'visitas', 'avencas', 'pedidos', 'pendentes', 'rota', 'compras', 'assistente'];
   for (let i = NAV.length - 1; i >= 0; i--) if (tirar.includes(NAV[i][0])) NAV.splice(i, 1);
   for (let i = NAV.length - 1; i >= 0; i--) if (['maquinas', 'mapa'].includes(NAV[i][0])) NAV.splice(i, 1);
-  NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['planear', 'Planear trabalho', 'cal'], ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route'], ['ativos', 'Ativos dos clientes', 'box'], ['equip', 'Máquinas (n.º de série)', 'tool']);
+  NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['planear', 'Planear trabalho', 'cal'], ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route'], ['ativos', 'Ativos dos clientes', 'box'], ['trocas', 'Peças de troca (revisões)', 'tool'], ['equip', 'Máquinas (n.º de série)', 'tool']);
   const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['encomendarp', 'Peças a encomendar', 'box'], ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro'], ['modulos', 'Plano e módulos', 'grid'], ['marca', 'Empresa e marca', 'edit'], ['empresas', 'Empresas (superadmin)', 'users']);
   for (let i = NAV.length - 1; i > 0; i--) if (NAV[i][0] === 'sep' && (NAV[i - 1][0] === 'sep' || i === NAV.length - 1)) NAV.splice(i, 1);
   SO_VALORES.push('ofcfg', 'tecnicosof');
   TABS.splice(0, TABS.length, ['inicio', 'Início', 'home'], ['meudia', 'O meu dia', 'clock'], ['oficina', 'Oficina', 'tool'], ['clientes', 'Clientes', 'users'], ['mais', 'Mais', 'menu']);
-  Object.assign(TITLES, { marca: 'Empresa e marca', empresas: 'Empresas', modulos: 'Plano e módulos', equip: 'Máquinas por n.º de série', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
+  Object.assign(TITLES, { trocas: 'Peças de troca', marca: 'Empresa e marca', empresas: 'Empresas', modulos: 'Plano e módulos', equip: 'Máquinas por n.º de série', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
   Object.defineProperty(TITLES, 'ofi', { get() { const f = S.data.fichas.get(S.params?.id); return f ? 'Ficha ' + cod(f) : 'Ficha'; } });
   const nc0 = navCounts; navCounts = () => ({ ...nc0(), oficina: D('fichas').filter(f => f.tipo !== 'guarda' && ABERTOS.includes(f.estado)).length });
 
@@ -182,7 +190,7 @@ window.OFI_INIT = function () {
   ];
   NOMES.fichas = ['ficha', 'Nova ficha de assistência'];
   F.fichas = [
-    { k: 'tipo', l: 'Tipo de trabalho', t: 'sel', get o() { return Object.fromEntries(Object.entries(TIPO).filter(([k]) => k === 'oficina' || (k === 'guarda' ? temMod('ativos') : temMod('fora')))); }, req: 1, def: 'oficina' },
+    { k: 'tipo', l: 'Tipo de trabalho', t: 'sel', get o() { return Object.fromEntries(Object.entries(TIPO).filter(([k]) => k === 'oficina' || k === 'interna' || (k === 'guarda' ? temMod('ativos') : temMod('fora')))); }, req: 1, def: 'oficina' },
     { k: 'estado', l: 'Estado', t: 'sel', o: EST, req: 1, def: 'recebido' },
     { k: 'entidade', l: 'Cliente', t: 'ent', req: 1, full: 1 },
     { k: 'proprietario', l: 'Proprietário da peça (sai na etiqueta) · vazio = nome do cliente', t: 'text', full: 1 },
@@ -224,7 +232,7 @@ window.OFI_INIT = function () {
     const rc = document.getElementById('f-recebidaEm'), ex = id && S.data.fichas.get(id);
     if (rc && ex && ex.entrada) rc.value = ex.entrada.slice(0, 10);
     const pv = document.querySelector('label[for="f-prevista"]');
-    const tg = () => { const fora = ['local', 'manutencao', 'reparacao'].includes(sel.value);
+    const tg = () => { const fora = FORA_T.includes(sel.value);
       LOCF.forEach(k => { const el = document.getElementById('f-' + k)?.closest('.fld'); if (el) el.style.display = fora ? '' : 'none'; });
       const r2 = rc?.closest('.fld'); if (r2) r2.style.display = fora ? 'none' : '';
       if (pv) pv.textContent = fora ? 'Data marcada com o cliente' : 'Data acordada com o cliente (entrega)'; };
@@ -239,7 +247,7 @@ window.OFI_INIT = function () {
     }
     if (col === 'fichas' && vals) {
       const T = k => String(vals[k] || '').trim();
-      const foraT = ['local', 'manutencao', 'reparacao'].includes(vals.tipo || (id && S.data.fichas.get(id)?.tipo));
+      const foraT = FORA_T.includes(vals.tipo || (id && S.data.fichas.get(id)?.tipo));
       if (!foraT) ['localNome', 'localMorada', 'localCp', 'localCidade', 'localCoords', 'localTelefone'].forEach(k => delete vals[k]);
       const rec = T('recebidaEm'); delete vals.recebidaEm;
       if (rec && !foraT) { const ant = id ? (S.data.fichas.get(id)?.entrada || '').slice(0, 10) : ''; if (rec !== ant) vals.entrada = rec === TODAY() && !id ? new Date().toISOString() : new Date(rec + 'T12:00').toISOString(); }
@@ -320,7 +328,7 @@ a.btn.pri{color:#fff}
 
   /* ---------- Início (painel da oficina) ---------- */
   VIEWS.inicio = () => loadingOr(() => {
-    const F0 = D('fichas'), naOf = F0.filter(f => f.tipo === 'oficina' && ABERTOS.includes(f.estado)), prontos = F0.filter(f => f.estado === 'pronto');
+    const F0 = D('fichas'), naOf = F0.filter(f => f.tipo === 'oficina' && ABERTOS.includes(f.estado)), prontos = F0.filter(f => f.estado === 'pronto' && f.tipo !== 'interna');
     const hoje = F0.filter(f => fora(f) && ABERTOS.includes(f.estado) && (!f.prevista || f.prevista <= TODAY()));
     const antigos = naOf.filter(f => dias(f) > 30).sort((a, b) => dias(b) - dias(a));
     const porAvisar = prontos.filter(f => !f.avisadoEm);
@@ -501,6 +509,7 @@ a.btn.pri{color:#fff}
         <div class="fld"><label for="cf-gar">Garantia de peças e reparações (dias)</label><input id="cf-gar" type="number" step="1" value="${c.garantiaDias ?? 30}"></div>
         <div class="fld"><label for="cf-garn">Garantia de máquinas novas (dias)</label><input id="cf-garn" type="number" step="1" value="${c.garantiaMaqNovaDias ?? 365}"></div>
         <div class="fld"><label for="cf-garu">Garantia de máquinas usadas (dias)</label><input id="cf-garu" type="number" step="1" value="${c.garantiaMaqUsadaDias ?? 180}"></div>
+        <div class="fld" style="grid-column:1/-1"><label for="cf-trv">Tempos fixos das peças revistas (minutos) · uma por linha, ex.: Caldeira = 30</label><textarea id="cf-trv" rows="4">${esc(Object.entries(c.temposRevisao || {}).map(([k, v]) => k + ' = ' + v).join('\n'))}</textarea></div>
         <div class="fld" style="grid-column:1/-1"><b>Taxa de armazenamento</b><span class="note" style="display:block">Para o que fica na empresa depois de pronto (ou desde a entrada, nas máquinas só guardadas). Cada empresa define as suas regras.</span></div>
         <div class="fld"><label for="cf-am">Cobrar</label><select id="cf-am">${[['nao', 'Não cobrar'], ['dia', 'Por dia'], ['mes', 'Por mês (30 dias)']].map(([k, l]) => `<option value="${k}" ${(c.armModo || 'nao') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         <div class="fld"><label for="cf-ai">A partir de</label><input id="cf-ai" type="date" value="${esc(c.armInicio || '')}"></div>
@@ -518,7 +527,7 @@ a.btn.pri{color:#fff}
         ${D('desl_tabelas').map(t => `<div class="fg" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;align-items:end;margin-bottom:10px"><div class="fld"><label>Nome</label><input data-dtn="${t.id}" value="${esc(t.nome)}"></div><div class="fld"><label>Escalões</label><input data-dte="${t.id}" value="${esc(escTxt(t.escaloes))}"></div><button class="btn" data-act="ofTabSave" data-id="${t.id}">Guardar</button></div><p class="note" style="margin:-4px 0 14px">${D('entidades').filter(e => e.deslTabela === t.id).length} clientes usam esta tabela</p>`).join('')}
         ${S.canWrite ? '<button class="btn" data-act="ofTabNew">' + ic('plus', 16) + 'Nova tabela</button>' : ''}</div></div></div>`;
   });
-  ACT.ofCfgSave = async () => { const n = id => { const x = $('#' + id).value; return x === '' ? null : parseFloat(x); }; if (await patch('oficina_config', cfg().id, { precoHora: n('cf-ph'), precoKm: n('cf-pk'), blocoMin: n('cf-bl') || 30, toleranciaMin: n('cf-tol') ?? 5, minimoForaMin: n('cf-mf') ?? 60, minimoOficinaMin: n('cf-mo') ?? 30, garantiaDias: n('cf-gar') || 30, garantiaMaqNovaDias: n('cf-garn') || 365, garantiaMaqUsadaDias: n('cf-garu') || 180, armModo: $('#cf-am').value, armInicio: $('#cf-ai').value || null, armGratis: n('cf-ag') ?? 0, armAvisoDias: n('cf-aav') ?? 3, armPrecoMaq: n('cf-apm'), armPrecoPeca: n('cf-app'), baseLat: n('cf-lat'), baseLng: n('cf-lng'), idaVolta: $('#cf-iv').checked })) toast('Guardado'); };
+  ACT.ofCfgSave = async () => { const n = id => { const x = $('#' + id).value; return x === '' ? null : parseFloat(x); }; if (await patch('oficina_config', cfg().id, { precoHora: n('cf-ph'), precoKm: n('cf-pk'), blocoMin: n('cf-bl') || 30, toleranciaMin: n('cf-tol') ?? 5, minimoForaMin: n('cf-mf') ?? 60, minimoOficinaMin: n('cf-mo') ?? 30, garantiaDias: n('cf-gar') || 30, garantiaMaqNovaDias: n('cf-garn') || 365, garantiaMaqUsadaDias: n('cf-garu') || 180, temposRevisao: Object.fromEntries(($('#cf-trv')?.value || '').split('\n').map(l => l.split('=')).filter(p => p.length === 2 && p[0].trim() && !isNaN(parseFloat(p[1]))).map(p => [p[0].trim(), Math.round(parseFloat(p[1]))])), armModo: $('#cf-am').value, armInicio: $('#cf-ai').value || null, armGratis: n('cf-ag') ?? 0, armAvisoDias: n('cf-aav') ?? 3, armPrecoMaq: n('cf-apm'), armPrecoPeca: n('cf-app'), baseLat: n('cf-lat'), baseLng: n('cf-lng'), idaVolta: $('#cf-iv').checked })) toast('Guardado'); };
   ACT.ofTabSave = async d => { const nome = $(`[data-dtn="${d.id}"]`).value.trim(), L = parseEsc($(`[data-dte="${d.id}"]`).value); if (!nome || !L.length) return toast('Falta o nome ou os escalões'); if (await patch('desl_tabelas', d.id, { nome, escaloes: L })) toast('Tabela guardada'); };
   ACT.ofTabNew = async () => { await save('desl_tabelas', null, { nome: 'Nova tabela', escaloes: [{ ate: 40, valor: 30 }, { ate: 70, valor: 50 }, { ate: 150, valor: 90 }] }); };
 
@@ -547,7 +556,7 @@ a.btn.pri{color:#fff}
     const pre = o => esc(JSON.stringify(Object.assign({ entidade: e.id }, o)));
     let h = `<div class="pg">${roBanner()}<div class="fh"><span class="av">${esc(initials(e.nome))}</span><div style="min-width:0;flex:1"><h1>${esc(e.nome)}</h1><div class="meta">${(e.tipos || []).map(k => badge(TIPOS[k] || k, 'gold')).join('')}${e.localidade ? badge(e.localidade) : ''}${ativos.length ? badge(ativos.length + ' na empresa', 'info') : ''}</div></div>${S.canWrite ? `<button class="btn sm" data-act="edit" data-col="entidades" data-id="${e.id}">${ic('edit', 16)}<span>Editar</span></button>` : ''}</div>
     <div class="acts"><a class="act ${tel ? '' : 'off'}" href="tel:${esc(telClean(tel))}">${ic('phone')}<span>Ligar</span></a><a class="act ${e.telemovel ? '' : 'off'}" href="https://wa.me/${esc(waNum(e.telemovel))}" target="_blank" rel="noopener">${ic('wa')}<span>WhatsApp</span></a><a class="act ${e.email ? '' : 'off'}" href="mailto:${esc(e.email || '')}">${ic('mail')}<span>Email</span></a><a class="act ${addr ? '' : 'off'}" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}" target="_blank" rel="noopener">${ic('pin')}<span>Mapa</span></a></div>
-    ${S.canWrite ? `<div class="of-row2"><button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'oficina' })}'>${ic('tool', 16)}Entrada na oficina</button>${temMod('fora') ? `<button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'local' })}'>${ic('pin', 16)}Assistência fora</button>` : ''}${temMod('ativos') ? `<button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'guarda', equipamento: 'Máquina completa' })}'>${ic('box', 16)}Guardar máquina</button>` : ''}<button class="btn sm" data-act="new" data-col="encomendas" data-preset='${pre({})}'>${ic('euro', 16)}Venda de peças</button></div>` : ''}
+    ${S.canWrite ? `<div class="of-row2"><button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'oficina' })}'>${ic('tool', 16)}Entrada na oficina</button>${temMod('fora') ? `<button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'local' })}'>${ic('pin', 16)}Assistência fora</button>` : ''}${temMod('ativos') ? `<button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'guarda', equipamento: 'Máquina completa' })}'>${ic('box', 16)}Guardar máquina</button>` : ''}${temMod('fora') ? `<button class="btn sm" data-act="ofiNew" data-preset='${pre({ tipo: 'transporte', equipamento: 'Máquina completa' })}'>${ic('swap', 16)}Transporte</button>` : ''}<button class="btn sm" data-act="new" data-col="encomendas" data-preset='${pre({})}'>${ic('euro', 16)}Venda de peças</button></div>` : ''}
     <div class="tabs">${tabs.map(([k, l, n]) => `<button class="${tab === k ? 'on' : ''}" data-act="ftab" data-c="${k}">${l}${n ? `<i>${n}</i>` : ''}</button>`).join('')}</div>`;
     if (tab === 'resumo') {
       h += `<div class="panel"><div class="pb" style="padding-top:4px"><div class="kv">${[['Pessoa de contacto', e.contacto], ['Telemóvel', e.telemovel], ['Telefone', e.telefone], ['Email', e.email], ['NIF', e.nif], ['Morada', addr], ...(S.verValores ? [['Preço/hora', eur(e.precoHora ?? cfg().precoHora)], ['Deslocação', e.deslModo === 'escaloes' ? 'Escalões · ' + (t?.nome || 'sem tabela') : 'Por km · ' + eur(e.precoKm ?? cfg().precoKm) + '/km']] : [])].filter(x => x[1]).map(([l, x]) => `<div class="kvi"><span>${l}</span><b>${esc(x)}</b></div>`).join('')}</div>${e.notas ? `<div class="kvi"><span>Notas</span><b style="font-weight:400;white-space:pre-wrap">${esc(e.notas)}</b></div>` : ''}</div></div>
@@ -1015,7 +1024,8 @@ a.btn.pri{color:#fff}
 
   /* ---------- exportar para faturar (CSV que abre no Excel) ---------- */
   ACT.ofiExport = () => {
-    const cli = $('#offcli')?.value || ''; const L = D('fichas').filter(f => ['pronto', 'entregue'].includes(f.estado) && !f.faturado && (!cli || f.entidade === cli)).sort((a, b) => a.numero - b.numero); if (!L.length) return toast('Nada por faturar');
+    const cli = $('#offcli')?.value || ''; const L = D('fichas').filter(f => f.tipo !== 'interna' && ['pronto', 'entregue'].includes(f.estado) && !f.faturado && (!cli || f.entidade === cli)).sort((a, b) => a.numero - b.numero); if (!L.length) return toast('Nada por faturar');
+    const pend = L.filter(f => (f.visitas || []).some(x => !x.culpa)); if (pend.length) return ACT.ofiCulpaLista({ ids: pend.map(f => f.id).join(',') });
     const c = v => { v = String(v ?? ''); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }, n = x => (Math.round((+x || 0) * 100) / 100).toString().replace('.', ',');
     const rows = [['Ficha (referência na fatura)', 'Data', 'Cliente', 'NIF', 'Referência', 'Descrição', 'Quantidade', 'Preço unitário s/ IVA', 'IVA %', 'Total s/ IVA']];
     L.forEach(f => {
@@ -1024,7 +1034,8 @@ a.btn.pri{color:#fff}
       const g = f.emGarantia;
       if (!g && v.fmin > 0) rows.push([...base, 'MO', 'Mão de obra · ' + desc, n(v.fmin / 60), n(precoH(f)), 23, n(v.mo)]);
       if (v.arm?.valor) rows.push([...base, 'ARM', `Armazenamento · ${v.arm.un} ${v.arm.uL} desde ${fDY(v.arm.desde)}`, n(v.arm.un), n(v.arm.preco), 23, n(v.arm.valor)]);
-      if (!g && v.desl) rows.push([...base, 'DESL', 'Deslocação · ' + v.desl.txt, 1, n(v.desl.valor), 23, n(v.desl.valor)]);
+      if (!g && v.desl) rows.push([...base, 'DESL', 'Deslocação · ' + v.desl.txt, v.desl.n || 1, n(v.desl.unit ?? v.desl.valor), 23, n(v.desl.valor)]);
+      if (!g) (f.trocas || []).forEach(x => { if (+x.min) rows.push([...base, 'REV', `Revisão de ${x.equipamento} (peça de troca ${x.codigo})`, n(x.min / 60), n(precoH(f)), 23, n(x.min / 60 * precoH(f))]); (x.pecas || []).forEach(p => rows.push([...base, p.ref || '', `${p.nome} (revisão ${x.codigo})`, n(p.qt), n(p.preco), 23, n(p.qt * p.preco)])); });
       if (!g) (f.pecas || []).forEach(p => rows.push([...base, p.ref || '', p.nome, n(p.qt), n(p.preco), 23, n(p.qt * p.preco)]));
       if (!g && f.orcValor != null && f.orcEstado === 'aceite' && !v.min && !(f.pecas || []).length) rows.push([...base, 'ORC', 'Reparação conforme orçamento · ' + desc, 1, n(f.orcValor), 23, n(f.orcValor)]);
     });
@@ -1035,6 +1046,127 @@ a.btn.pri{color:#fff}
   ACT.ofiFatAll = async d => { for (const id of d.ids.split(',')) await patch('fichas', id, { faturado: true, faturadoEm: new Date().toISOString() }); closeSheet(); toast('Marcadas como faturadas'); };
 
 
+
+
+  /* =================== FICHAS INTERNAS, PEÇAS DE TROCA, TRANSPORTE, VOLTAR CÁ, REABRIR =================== */
+  const interna = f => f.tipo === 'interna';
+  const prontasTroca = () => D('fichas').filter(f => interna(f) && f.estado === 'pronto' && !f.aplicadaEm);
+  const tempoFixo = eq => { const T = cfg().temposRevisao || {}; const k = Object.keys(T).find(x => norm(x) === norm(eq || '')); return k ? +T[k] : null; };
+  async function entInterna() {
+    let e = D('entidades').find(x => x.interna); if (e) return e.id;
+    return await save('entidades', null, { nome: (emp().nome || cfg().empresa || 'Empresa') + ' (material da casa)', interna: true, estado: 'cliente' });
+  }
+  // abrir uma ficha interna: o cliente é sempre a própria empresa
+  const ofiNew0 = ACT.ofiNew;
+  ACT.ofiNew = async d => { let p = null; try { p = d.preset ? JSON.parse(d.preset) : null; } catch (_) { } if (p?.tipo === 'interna') { const id = await entInterna(); if (!id) return toast('Não foi possível preparar a ficha interna'); p.entidade = id; p.proprietario = (emp().nome || '') + ' · material da casa'; d = { ...d, preset: JSON.stringify(p) }; } return ofiNew0(d); };
+
+  ACT.ofiTroca = d => {
+    const f = fx(d.id); if (!f) return; const L = prontasTroca().sort((a, b) => (norm(b.equipamento) === norm(f.equipamento)) - (norm(a.equipamento) === norm(f.equipamento)) || (norm(b.modelo || '') === norm(f.modelo || '')) - (norm(a.modelo || '') === norm(f.modelo || '')));
+    openSheet(`<div class="sh"><h2>Trocar por peça revista</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
+      ${L.length ? `<p class="note" style="margin:0 0 8px">Escolha a peça revista que vai aplicar. A peça velha do cliente fica na ${esc(emp().nome || 'empresa')} e abre-se uma ficha interna para a rever.</p>
+      ${L.map(x => { const fx0 = tempoFixo(x.equipamento), real = Math.round(minReal(x)); return `<div class="row" role="button" tabindex="0" data-act="ofiTrocaOk" data-id="${f.id}" data-c="${x.id}"><span class="rt"><span class="r1">${esc(nomeEq(x))}${x.nSerie ? ' · S/N ' + esc(x.nSerie) : ''}</span><span class="r2">${esc(cod(x))} · revisão ${fmtMin(fx0 ?? real)}${fx0 != null ? ' (tempo fixo)' : ''} · ${(x.pecas || []).length} ${(x.pecas || []).length === 1 ? 'peça' : 'peças'}${x.tecnico ? ' · ' + esc(tecNome(x.tecnico)) : ''}</span></span><span class="rr">${norm(x.equipamento) === norm(f.equipamento) ? badge('Mesmo tipo', 'ok') : ''}</span></div>`; }).join('')}`
+      : `<div class="panel empty"><b>Não há peças revistas prontas</b>Abra uma «Revisão interna», faça a revisão e marque-a como «Pronto».</div>`}</div>`);
+  };
+  ACT.ofiTrocaOk = async d => {
+    const f = fx(d.id), x = fx(d.c); if (!f || !x || x.aplicadaEm) return;
+    const q = quotas(x); let tec = x.tecnico || null, bq = 0; q.forEach((v, k) => { if (v > bq) { bq = v; tec = k; } });
+    const fx0 = tempoFixo(x.equipamento), min = fx0 ?? Math.round(minReal(x));
+    const item = { interna: x.id, codigo: cod(x), equipamento: nomeEq(x), min, fixo: fx0 != null, tecnico: tec, em: new Date().toISOString(), pecas: (x.pecas || []).map(p => ({ ref: p.ref || '', nome: p.nome, qt: +p.qt || 0, preco: +p.preco || 0 })) };
+    closeSheet();
+    if (!(await patch('fichas', f.id, { trocas: [...(f.trocas || []), item] }))) return;
+    await patch('fichas', x.id, { aplicadaEm: f.id, estado: 'entregue', entregueEm: new Date().toISOString() });
+    // a peça velha do cliente fica sempre na casa: nova ficha interna «por rever»
+    const eid = await entInterna();
+    if (eid) await save('fichas', null, { tipo: 'interna', estado: 'recebido', entidade: eid, proprietario: (emp().nome || '') + ' · material da casa', equipamento: x.equipamento || f.equipamento, marca: x.marca || f.marca, modelo: x.modelo || f.modelo, grupo: x.grupo || f.grupo, avaria: `Peça velha retirada na ficha ${cod(f)} (${prop(f)})${f.avaria ? ' · ' + f.avaria : ''}`, origemFicha: f.id, entrada: new Date().toISOString() });
+    toast('Peça revista aplicada. A peça velha ficou com uma ficha interna «por rever».');
+  };
+  ACT.ofiTrocaTira = async d => {
+    const f = fx(d.id); if (!f || !confirm('Retirar esta peça revista da ficha? A ficha interna volta a ficar «Pronta». A ficha da peça velha não é apagada.')) return;
+    const T = (f.trocas || []).slice(), x = T.splice(+d.i, 1)[0]; if (!x) return;
+    if (await patch('fichas', f.id, { trocas: T })) { if (fx(x.interna)) await patch('fichas', x.interna, { aplicadaEm: null, estado: 'pronto', entregueEm: null }); toast('Retirada'); }
+  };
+
+  // «Não resolvido — voltar cá»
+  ACT.ofiVoltar = d => { const f = fx(d.id); if (!f) return; openSheet(`<div class="sh"><h2>Não resolvido · voltar cá</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
+    <p class="note" style="margin:0">Fica registada a visita de hoje (${fmtKm(f.km ?? 0)} km) e a ficha continua aberta para a próxima visita.</p>
+    <div class="fld"><label for="vc-m">Porquê (ex.: falta a peça X)</label><input id="vc-m"></div>
+    <div class="fld"><label for="vc-d">Próxima visita</label><input id="vc-d" type="date" value="${esc(addD(TODAY(), 1))}"></div>
+    <div class="fld"><label>De quem é a responsabilidade da visita extra?</label><div class="of-est"><label class="chipb"><input type="radio" name="vc-c" value="" checked> Decidir ao faturar</label><label class="chipb"><input type="radio" name="vc-c" value="cliente"> Do cliente (cobra-se)</label><label class="chipb"><input type="radio" name="vc-c" value="nossa"> Nossa (não se cobra)</label></div></div>
+    <button class="btn pri" data-act="ofiVoltarOk" data-id="${f.id}">Registar e marcar nova visita</button></div>`); };
+  ACT.ofiVoltarOk = async d => {
+    const f = fx(d.id); if (!f) return; const m = ($('#vc-m')?.value || '').trim(), dt = $('#vc-d')?.value || '', c = document.querySelector('input[name=vc-c]:checked')?.value || null;
+    if (!m) return toast('Escreva o motivo'); if (!dt) return toast('Escolha a data da próxima visita');
+    const run = aberto(f); if (run) await ACT.ofiCrono({ id: f.id });
+    const vis = { data: (f.chegadaEm || new Date().toISOString()), km: f.km ?? null, motivo: m, culpa: c, tecnico: f.tecnico || meuTec()?.id || null, min: Math.round(minutos(f) - (f.visitas || []).reduce((s, x) => s + (+x.minAte || 0), 0)), minAte: Math.round(minutos(f)) };
+    if (await patch('fichas', f.id, { visitas: [...(f.visitas || []), vis], prevista: dt, chegadaEm: null, estado: /pe[çc]a/i.test(m) ? 'aguarda_peca' : f.estado })) { closeSheet(); toast('Visita registada. A ficha fica na rota de ' + fDY(dt) + '.'); }
+  };
+  ACT.ofiCulpa = async d => { const f = fx(d.id); if (!f) return; const V = (f.visitas || []).map((x, i) => i === +d.i ? { ...x, culpa: d.c || null } : x); await patch('fichas', f.id, { visitas: V }); };
+  ACT.ofiCulpaLista = d => { const L = d.ids.split(',').map(fx).filter(Boolean); openSheet(`<div class="sh"><h2>Antes de exportar: visitas extra</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">
+    <p class="note" style="margin:0 0 8px">Estas fichas tiveram visitas «voltar cá» sem decisão. Diga de quem foi a responsabilidade: se foi do cliente, a deslocação dessa visita é cobrada.</p>
+    ${L.map(f => (f.visitas || []).map((x, i) => x.culpa ? '' : `<div class="row"><span class="rt"><span class="r1">${esc(cod(f))} · ${esc(prop(f))}</span><span class="r2">Visita de ${fDY(x.data)} · ${esc(x.motivo || '')}</span></span><span class="rr" style="gap:6px;display:flex"><button class="btn sm" data-act="ofiCulpa" data-id="${f.id}" data-i="${i}" data-c="cliente">Cliente</button><button class="btn sm" data-act="ofiCulpa" data-id="${f.id}" data-i="${i}" data-c="nossa">Nossa</button></span></div>`).join('')).join('')}
+    <button class="btn pri" data-act="ofiCulpaFim">Continuar a exportação</button></div>`); };
+  ACT.ofiCulpaFim = () => { closeSheet(); setTimeout(() => ACT.ofiExport(), 80); };
+
+  // reabrir fichas fechadas e ainda não faturadas
+  ACT.ofiReabrir = async d => {
+    const f = fx(d.id); if (!f || f.faturado) return toast('Ficha já faturada: não se pode reabrir');
+    if (!confirm(`Reabrir a ficha ${cod(f)}? Volta a «Em reparação» e pode mexer no tempo e nas peças.`)) return;
+    if (await patch('fichas', f.id, { estado: 'reparacao', prontoEm: null, entregueEm: null, reabertaEm: new Date().toISOString(), reabertaPor: S.me?.name || S.me?.email || '' })) toast('Ficha reaberta');
+  };
+
+  // transporte: entregar uma máquina no local e recolher a que lá está
+  ACT.ofiTrEnt = d => { const f = fx(d.id); if (!f) return; const L = D('fichas').filter(x => x.id !== f.id && naCasa(x) && x.equipamento === 'Máquina completa' && (fechada(x) || x.tipo === 'guarda' || interna(x)));
+    openSheet(`<div class="sh"><h2>Máquina a entregar</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb">${L.length ? L.map(x => `<div class="row" role="button" tabindex="0" data-act="ofiTrEntOk" data-id="${f.id}" data-c="${x.id}"><span class="rt"><span class="r1">${esc(nomeEq(x))}${x.nSerie ? ' · S/N ' + esc(x.nSerie) : ''}</span><span class="r2">${esc(cod(x))} · ${esc(prop(x))} · ${esc(estL(x))}</span></span>${x.entidade === f.entidade ? `<span class="rr">${badge('Deste cliente', 'ok')}</span>` : ''}</div>`).join('') : '<div class="panel empty"><b>Não há máquinas prontas na oficina</b></div>'}</div>`); };
+  ACT.ofiTrEntOk = async d => { const f = fx(d.id), x = fx(d.c); if (!f || !x) return; closeSheet(); const L0 = loc(f);
+    await patch('fichas', x.id, { estado: 'entregue', entregueEm: new Date().toISOString(), notas: [x.notas, `Entregue no local ${L0?.nome || prop(f)} pelo transporte ${cod(f)}`].filter(Boolean).join('\n') });
+    await patch('fichas', f.id, { transpEntrega: x.id }); toast('Máquina marcada como entregue no local'); };
+  ACT.ofiTrRec = d => { const f = fx(d.id); if (!f) return; const L0 = loc(f); S.ofTranspPara = f.id;
+    openForm('fichas', null, { tipo: 'oficina', estado: 'recebido', entidade: f.entidade, equipamento: 'Máquina completa', avaria: `Recolhida no local ${L0?.nome || prop(f)} (transporte ${cod(f)})` }); };
+  const save1 = save; save = async (col, id, vals) => { const r = await save1(col, id, vals); if (r && col === 'fichas' && !id && S.ofTranspPara && vals?.tipo !== 'interna') { const tid = S.ofTranspPara; S.ofTranspPara = null; await patch('fichas', tid, { transpRecolha: r }); } return r; };
+
+  // painéis na página da ficha
+  const ofiV0 = VIEWS.ofi;
+  VIEWS.ofi = () => {
+    let h = ofiV0(); const f = S.data.fichas.get(S.params.id); if (!f || typeof h !== 'string') return h;
+    const ro = !S.canWrite, v = valores(f); let ex = '';
+    // reabrir
+    if (fechada(f) && !f.faturado && !ro) ex += `<div class="of-alert"><span style="flex:1">Ficha fechada e ainda não faturada.${f.reabertaEm ? ` <span class="note">Reaberta antes a ${fD(f.reabertaEm)} por ${esc(f.reabertaPor || '')}.</span>` : ''}</span><button class="btn sm" data-act="ofiReabrir" data-id="${f.id}">Reabrir</button></div>`;
+    else if (f.reabertaEm) ex += `<p class="note" style="margin:0">Reaberta a ${fD(f.reabertaEm)} por ${esc(f.reabertaPor || '')}.</p>`;
+    // ficha interna
+    if (interna(f)) { const o = f.origemFicha && fx(f.origemFicha), a = f.aplicadaEm && fx(f.aplicadaEm), tf = tempoFixo(f.equipamento);
+      ex += `<div class="panel" style="border-color:var(--gold)"><div class="ph"><h2>Revisão interna · peça de troca</h2></div><div class="pb"><p style="margin:0 0 6px">${a ? `Aplicada no cliente <b>${esc(prop(a))}</b> · <a href="#" data-act="ofiOpen" data-id="${a.id}">${esc(cod(a))}</a>` : f.estado === 'pronto' ? '<b>Pronta a usar numa troca.</b>' : 'Em revisão: quando estiver pronta, marque «Pronto» e fica disponível para trocas.'}</p>
+        <p class="note" style="margin:0">${o ? `Peça velha retirada da ficha <a href="#" data-act="ofiOpen" data-id="${o.id}">${esc(cod(o))}</a> (${esc(prop(o))}). ` : ''}Tempo a cobrar na troca: <b>${tf != null ? fmtMin(tf) + ' (tempo fixo para ' + esc(f.equipamento) + ')' : fmtMin(Math.round(minReal(f))) + ' (tempo registado; sem tempo fixo para ' + esc(f.equipamento || 'este tipo') + ')'}</b>. As peças aplicadas aqui vão para a ficha do cliente.</p></div></div>`; }
+    // peças revistas aplicadas (fichas de clientes)
+    if (!interna(f) && f.tipo !== 'guarda') { const TR = f.trocas || [];
+      ex += `<div class="panel"><div class="ph"><h2>Peças revistas (troca)</h2>${S.verValores && (v.trMo + v.trPc) ? `<b class="num">${eur(v.trMo + v.trPc)}</b>` : ''}</div><div class="pb">
+        ${TR.map((x, i) => `<div class="row"><span class="rt"><span class="r1">${esc(x.equipamento)} revista · <a href="#" data-act="ofiOpen" data-id="${x.interna}">${esc(x.codigo)}</a></span><span class="r2">Revisão ${fmtMin(x.min)}${x.fixo ? ' (tempo fixo)' : ''}${x.tecnico ? ' · ' + esc(tecNome(x.tecnico)) : ''}${(x.pecas || []).length ? ' · ' + x.pecas.map(p => p.qt + '× ' + p.nome).join(', ') : ''}</span></span>${ro || fechada(f) ? '' : `<span class="rr"><button class="btn sm" data-act="ofiTrocaTira" data-id="${f.id}" data-i="${i}">Retirar</button></span>`}</div>`).join('') || '<p class="note" style="margin:0 0 8px">Se trocar uma peça do cliente por uma revista da casa, escolha-a aqui. O tempo da revisão e as peças dela entram nesta ficha.</p>'}
+        ${ro || fechada(f) ? '' : `<button class="btn" data-act="ofiTroca" data-id="${f.id}">${ic('swap', 16)}Trocar por peça revista${prontasTroca().length ? ` (${prontasTroca().length} prontas)` : ''}</button>`}</div></div>`; }
+    // transporte
+    if (f.tipo === 'transporte') { const en = f.transpEntrega && fx(f.transpEntrega), rc = f.transpRecolha && fx(f.transpRecolha);
+      ex += `<div class="panel"><div class="ph"><h2>Transporte</h2></div><div class="pb"><div class="of-row2" style="flex-wrap:wrap">
+        <div style="flex:1;min-width:220px"><span class="note">Máquina entregue no local</span><p style="margin:4px 0 8px">${en ? `<a href="#" data-act="ofiOpen" data-id="${en.id}">${esc(cod(en))}</a> · ${esc(nomeEq(en))}${en.nSerie ? ' · S/N ' + esc(en.nSerie) : ''}` : '—'}</p>${ro || en ? '' : `<button class="btn sm" data-act="ofiTrEnt" data-id="${f.id}">Escolher máquina a entregar</button>`}</div>
+        <div style="flex:1;min-width:220px"><span class="note">Máquina recolhida</span><p style="margin:4px 0 8px">${rc ? `<a href="#" data-act="ofiOpen" data-id="${rc.id}">${esc(cod(rc))}</a> · ${esc(nomeEq(rc))}${rc.nSerie ? ' · S/N ' + esc(rc.nSerie) : ''}` : '—'}</p>${ro || rc ? '' : `<button class="btn sm" data-act="ofiTrRec" data-id="${f.id}">Registar máquina recolhida</button>`}</div></div></div></div>`; }
+    // visitas («voltar cá»)
+    if (fora(f)) { const VS = f.visitas || [];
+      ex += `<div class="panel"><div class="ph"><h2>Visitas</h2>${VS.length ? `<span class="note">${VS.length + 1}.ª visita</span>` : ''}</div><div class="pb">
+        ${VS.map((x, i) => `<div class="row"><span class="rt"><span class="r1">${fDY(x.data)} · não resolvido</span><span class="r2">${esc(x.motivo || '')}${x.km != null ? ' · ' + fmtKm(x.km) + ' km' : ''}${x.tecnico ? ' · ' + esc(tecNome(x.tecnico)) : ''}</span></span><span class="rr" style="display:flex;gap:6px;align-items:center">${x.culpa === 'nossa' ? badge('Não cobrada', 'mute') : x.culpa === 'cliente' ? badge('Cobrada', 'ok') : badge('Decidir ao faturar', 'warn')}${ro || !S.verValores ? '' : `<select data-ofculpa="${f.id}" data-i="${i}" aria-label="Responsabilidade"><option value="">Decidir depois</option><option value="cliente" ${x.culpa === 'cliente' ? 'selected' : ''}>Do cliente</option><option value="nossa" ${x.culpa === 'nossa' ? 'selected' : ''}>Nossa</option></select>`}</span></div>`).join('')}
+        ${ro || fechada(f) ? (VS.length ? '' : '<p class="note" style="margin:0">Uma só visita.</p>') : `<button class="btn" data-act="ofiVoltar" data-id="${f.id}">${ic('clock', 16)}Não resolvido · voltar cá</button>`}</div></div>`; }
+    const alvo = '<div class="panel"><div class="ph"><h2>Tempo de trabalho</h2>';
+    return h.includes(alvo) ? h.replace(alvo, ex + alvo) : h;
+  };
+  document.addEventListener('change', e => { const id = e.target?.dataset?.ofculpa; if (id) ACT.ofiCulpa({ id, i: e.target.dataset.i, c: e.target.value }); });
+
+  // peças de troca: lista
+  VIEWS.trocas = () => loadingOr(() => {
+    const I = D('fichas').filter(interna), pr = I.filter(f => f.estado === 'pronto' && !f.aplicadaEm), rev = I.filter(f => ABERTOS.includes(f.estado)), ap = I.filter(f => f.aplicadaEm).sort((a, b) => (b.entregueEm || '').localeCompare(a.entregueEm || '')).slice(0, 30);
+    const porTipo = {}; pr.forEach(f => { const k = nomeEq(f); porTipo[k] = (porTipo[k] || 0) + 1; });
+    const lin = f => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero ?? '•'}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}${f.nSerie ? ' · S/N ' + esc(f.nSerie) : ''}</span><span class="r2">${esc(cod(f))}${f.tecnico ? ' · ' + esc(tecNome(f.tecnico)) : ''}${f.aplicadaEm && fx(f.aplicadaEm) ? ' · aplicada em ' + esc(prop(fx(f.aplicadaEm))) : ''}</span></span><span class="rr">${badge(estL(f), EST_T[f.estado])}</span></div>`;
+    return `<div class="pg">${roBanner()}${S.canWrite ? `<div><button class="btn pri" data-act="ofiNew" data-preset='{"tipo":"interna","equipamento":"Caldeira"}'>${ic('plus', 16)}Nova revisão interna</button></div>` : ''}
+      <div class="mini">${Object.entries(porTipo).map(([k, n]) => `<div><span>${esc(k)} prontas</span><b>${n}</b></div>`).join('') || '<div><span>Peças prontas</span><b>0</b></div>'}<div><span>Em revisão</span><b>${rev.length}</b></div></div>
+      <div class="panel"><div class="ph"><h2>Prontas a usar</h2></div>${pr.map(lin).join('') || '<div class="pb"><p class="note" style="margin:0">Nenhuma.</p></div>'}</div>
+      <div class="panel"><div class="ph"><h2>Por rever / em revisão</h2></div>${rev.map(lin).join('') || '<div class="pb"><p class="note" style="margin:0">Nenhuma.</p></div>'}</div>
+      <div class="panel"><div class="ph"><h2>Aplicadas em clientes</h2></div>${ap.map(lin).join('') || '<div class="pb"><p class="note" style="margin:0">Nenhuma.</p></div>'}</div></div>`;
+  });
 
   /* =================== MÁQUINAS (N.º DE SÉRIE), GARANTIAS E RETRABALHO =================== */
   const GAR = { pecas: 'Peças / reparação', maq_nova: 'Máquina nova', maq_usada: 'Máquina usada', sem: 'Sem garantia' };
@@ -1141,6 +1273,7 @@ a.btn.pri{color:#fff}
   function quotas(f) {
     const m = new Map(); let tot = 0;
     tempos(f).forEach(t => { if (!t.fim || !t.tecnico) return; m.set(t.tecnico, (m.get(t.tecnico) || 0) + (+t.minutos || 0)); tot += +t.minutos || 0; });
+    (f.trocas || []).forEach(x => { if (!x.tecnico || !(+x.min)) return; m.set(x.tecnico, (m.get(x.tecnico) || 0) + (+x.min)); tot += +x.min; });
     if (!tot && f.tecnico) return new Map([[f.tecnico, 1]]);
     const q = new Map(); m.forEach((v, k) => q.set(k, tot ? v / tot : 0)); return q;
   }

@@ -1089,7 +1089,7 @@ a.btn.pri{color:#fff}
     const f = fx(d.id), x = fx(d.c); if (!f || !x || x.aplicadaEm) return;
     const q = quotas(x); let tec = x.tecnico || null, bq = 0; q.forEach((v, k) => { if (v > bq) { bq = v; tec = k; } });
     const fx0 = tempoFixo(x.equipamento), min = fx0 ?? Math.round(minReal(x));
-    const item = { interna: x.id, codigo: cod(x), equipamento: nomeEq(x), min, fixo: fx0 != null, tecnico: tec, em: new Date().toISOString(), pecas: (x.pecas || []).map(p => ({ ref: p.ref || '', nome: p.nome, qt: +p.qt || 0, preco: +p.preco || 0 })) };
+    const item = { interna: x.id, codigo: cod(x), equipamento: nomeEq(x), min, fixo: fx0 != null, tecnico: tec, em: new Date().toISOString(), pecas: (x.pecas || []).map(p => ({ artigo: p.artigo || null, ref: p.ref || '', nome: p.nome, qt: +p.qt || 0, preco: +p.preco || 0 })) };
     closeSheet();
     if (!(await patch('fichas', f.id, { trocas: [...(f.trocas || []), item] }))) return;
     await patch('fichas', x.id, { aplicadaEm: f.id, estado: 'entregue', entregueEm: new Date().toISOString() });
@@ -1142,6 +1142,38 @@ a.btn.pri{color:#fff}
     openForm('fichas', null, { tipo: 'oficina', estado: 'recebido', entidade: f.entidade, equipamento: 'Máquina completa', avaria: `Recolhida no local ${L0?.nome || prop(f)} (transporte ${cod(f)})` }); };
   const save1 = save; save = async (col, id, vals) => { const r = await save1(col, id, vals); if (r && col === 'fichas' && !id && S.ofTranspPara && vals?.tipo !== 'interna') { const tid = S.ofTranspPara; S.ofTranspPara = null; await patch('fichas', tid, { transpRecolha: r }); } return r; };
 
+
+  // peças de uma peça revista já aplicada: ficam na ficha interna e na ficha do cliente
+  P.up = P.up || 'M6 15l6-6 6 6'; P.down = P.down || 'M6 9l6 6 6-6';
+  ACT.ofiTrAbre = d => { const k = d.id + ':' + d.i; S.ofTrA = S.ofTrA === k ? null : k; S.ofTrQ = ''; render(); };
+  function trEditorH(f, x, i, ro) {
+    const it = fx(x.interna), q = S.ofTrQ || '', res = q.length >= 2 ? pecasDe(it?.modelo || f.modelo, '').filter(a => norm(a.nome + ' ' + (a.ref || '')).includes(norm(q))).slice(0, 30) : [];
+    return `<div style="border:1px solid var(--line);border-radius:12px;padding:12px;margin:6px 0 10px;background:var(--surface-2)">
+      <div class="of-row2" style="margin-bottom:6px"><b style="flex:1">Peças desta revisão · ${esc(x.codigo)}</b>${it ? `<button class="btn sm" data-act="ofiOpen" data-id="${it.id}">Abrir ficha interna</button>` : ''}${ro ? '' : `<button class="btn sm" data-act="ofiTrocaTira" data-id="${f.id}" data-i="${i}">Retirar a troca</button>`}</div>
+      ${(x.pecas || []).map((p, j) => `<div class="of-pc"><div class="grow">${esc(p.nome)}<small>${esc(p.ref || '')}${S.verValores ? ' · ' + eur(p.preco) + '/un' : ''}</small></div>${ro ? `<b>${p.qt}</b>` : `<div class="of-qt"><button data-act="ofiTrQ" data-id="${f.id}" data-i="${i}" data-j="${j}" data-c="-1" aria-label="Menos">−</button><b>${p.qt}</b><button data-act="ofiTrQ" data-id="${f.id}" data-i="${i}" data-j="${j}" data-c="1" aria-label="Mais">+</button></div>`}</div>`).join('') || '<p class="note" style="margin:0">Ainda sem peças.</p>'}
+      ${ro ? '' : `<div class="of-row2" style="margin-top:10px"><div class="fld" style="flex:1;min-width:160px;margin:0"><label for="trref">Código da peça</label><input id="trref" placeholder="Ex.: 0V2277" autocomplete="off" onkeydown="if(event.key==='Enter')document.querySelector('[data-act=ofiTrRef]').click()"></div><button class="btn pri" style="align-self:flex-end" data-act="ofiTrRef" data-id="${f.id}" data-i="${i}">Pôr</button></div>
+      <div class="fld" style="margin:10px 0 0"><label for="trq">Ou procurar pelo nome</label><input id="trq" data-trq="${f.id}:${i}" value="${esc(q)}" placeholder="Ex.: resistência" autocomplete="off"></div>
+      ${res.length ? `<div class="of-res">${res.map(a => `<div class="of-pc"><div class="grow">${esc(a.nome)}<small>${esc(a.ref || '')}</small></div><button class="btn sm" data-act="ofiTrAdd" data-id="${f.id}" data-i="${i}" data-a="${a.id}">Pôr</button></div>`).join('')}</div>` : q.length >= 2 ? '<p class="note" style="margin:6px 0 0">Nenhuma peça encontrada.</p>' : ''}`}
+      <p class="note" style="margin:10px 0 0">As peças ficam na ficha interna (histórico e stock) e nesta ficha (cobradas ao cliente). O tempo da revisão não muda.</p></div>`;
+  }
+  async function trGrava(f, i, L) {
+    if (f.faturado) return toast('Ficha já faturada');
+    const T = clone(f.trocas || []), x = T[i]; if (!x) return; x.pecas = L;
+    if (!(await patch('fichas', f.id, { trocas: T }))) return;
+    const it = fx(x.interna); if (it) await patch('fichas', it.id, { pecas: L.map(p => ({ ...p })) });
+  }
+  async function trPoe(f, i, a, ref) {
+    const L = clone((f.trocas || [])[i]?.pecas || []);
+    const y = a ? L.find(p => p.artigo === a.id || (a.ref && nref(p.ref) === nref(a.ref))) : L.find(p => norm(p.ref) === norm(ref));
+    if (y) y.qt = (+y.qt || 0) + 1; else L.push(a ? { artigo: a.id, nome: a.nome, ref: a.ref || '', qt: 1, preco: +a.preco || 0 } : { artigo: null, nome: 'Peça ' + ref + ' (fora do catálogo)', ref, qt: 1, preco: 0 });
+    await trGrava(f, i, L); toast('1 × ' + (a ? a.nome : ref));
+  }
+  ACT.ofiTrAdd = d => { const f = fx(d.id), a = S.data.artigos.get(d.a); if (f && a) trPoe(f, +d.i, a); };
+  ACT.ofiTrRef = d => { const f = fx(d.id), r = ($('#trref')?.value || '').trim(); if (!f || !r) return toast('Escreva o código'); const a = porRef(r); if (!a && !confirm(`O código ${r} não está no catálogo. Pôr mesmo assim (sem preço)?`)) return; trPoe(f, +d.i, a, r); };
+  ACT.ofiTrQ = d => { const f = fx(d.id); if (!f) return; const L = clone((f.trocas || [])[+d.i]?.pecas || []), p = L[+d.j]; if (!p) return; p.qt = (+p.qt || 0) + (+d.c); if (p.qt <= 0) L.splice(+d.j, 1); trGrava(f, +d.i, L); };
+  let trT = null;
+  document.addEventListener('input', e => { if (!e.target?.dataset?.trq) return; S.ofTrQ = e.target.value; clearTimeout(trT); trT = setTimeout(() => { const pos = e.target.selectionStart; render(); const n = document.getElementById('trq'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (_) { } } }, 250); });
+
   // painéis na página da ficha
   const ofiV0 = VIEWS.ofi;
   VIEWS.ofi = () => {
@@ -1157,7 +1189,7 @@ a.btn.pri{color:#fff}
     // peças revistas aplicadas (fichas de clientes)
     if (!interna(f) && f.tipo !== 'guarda') { const TR = f.trocas || [];
       ex += `<div class="panel"><div class="ph"><h2>Peças revistas (troca)</h2>${S.verValores && (v.trMo + v.trPc) ? `<b class="num">${eur(v.trMo + v.trPc)}</b>` : ''}</div><div class="pb">
-        ${TR.map((x, i) => `<div class="row"><span class="rt"><span class="r1">${esc(x.equipamento)} revista · <a href="#" data-act="ofiOpen" data-id="${x.interna}">${esc(x.codigo)}</a></span><span class="r2">Revisão ${fmtMin(x.min)}${x.fixo ? ' (tempo fixo)' : ''}${x.tecnico ? ' · ' + esc(tecNome(x.tecnico)) : ''}${(x.pecas || []).length ? ' · ' + x.pecas.map(p => p.qt + '× ' + p.nome).join(', ') : ''}</span></span>${ro || fechada(f) ? '' : `<span class="rr"><button class="btn sm" data-act="ofiTrocaTira" data-id="${f.id}" data-i="${i}">Retirar</button></span>`}</div>`).join('') || '<p class="note" style="margin:0 0 8px">Se trocar uma peça do cliente por uma revista da casa, escolha-a aqui. O tempo da revisão e as peças dela entram nesta ficha.</p>'}
+        ${TR.map((x, i) => `<div class="row" role="button" tabindex="0" data-act="ofiTrAbre" data-id="${f.id}" data-i="${i}"><span class="rt"><span class="r1">${esc(x.equipamento)} revista · ${esc(x.codigo)}</span><span class="r2">Revisão ${fmtMin(x.min)}${x.fixo ? ' (tempo fixo)' : ''}${x.tecnico ? ' · ' + esc(tecNome(x.tecnico)) : ''} · ${(x.pecas || []).length ? x.pecas.map(p => p.qt + '× ' + p.nome).join(', ') : 'sem peças'}</span></span><span class="rr">${ic(S.ofTrA === f.id + ':' + i ? 'up' : 'down', 18)}</span></div>${S.ofTrA === f.id + ':' + i ? trEditorH(f, x, i, ro || f.faturado) : ''}`).join('') || '<p class="note" style="margin:0 0 8px">Se trocar uma peça do cliente por uma revista da casa, escolha-a aqui. O tempo da revisão e as peças dela entram nesta ficha.</p>'}
         ${ro || fechada(f) ? '' : `<button class="btn" data-act="ofiTroca" data-id="${f.id}">${ic('swap', 16)}Trocar por peça revista${prontasTroca().length ? ` (${prontasTroca().length} prontas)` : ''}</button>`}</div></div>`; }
     // transporte
     if (f.tipo === 'transporte') { const en = f.transpEntrega && fx(f.transpEntrega), rc = f.transpRecolha && fx(f.transpRecolha);

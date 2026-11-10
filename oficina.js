@@ -232,7 +232,10 @@ window.OFI_INIT = function () {
     const rc = document.getElementById('f-recebidaEm'), ex = id && S.data.fichas.get(id);
     if (rc && ex && ex.entrada) rc.value = ex.entrada.slice(0, 10);
     const pv = document.querySelector('label[for="f-prevista"]');
-    const tg = () => { const fora = FORA_T.includes(sel.value);
+    const INTF = ['entidade-q', 'proprietario', 'prevista', 'precoHora'];
+    const tg = () => { const fora = FORA_T.includes(sel.value), intr = sel.value === 'interna';
+      INTF.forEach(k => { const el = document.getElementById('f-' + k)?.closest('.fld'); if (el) el.style.display = intr ? 'none' : ''; });
+      if (intr) entInterna().then(eid => { const h = document.getElementById('f-entidade'), q = document.getElementById('f-entidade-q'); if (eid && h) { h.value = eid; if (q) q.value = S.data.entidades.get(eid)?.nome || ''; } });
       LOCF.forEach(k => { const el = document.getElementById('f-' + k)?.closest('.fld'); if (el) el.style.display = fora ? '' : 'none'; });
       const r2 = rc?.closest('.fld'); if (r2) r2.style.display = fora ? 'none' : '';
       if (pv) pv.textContent = fora ? 'Data marcada com o cliente' : 'Data acordada com o cliente (entrega)'; };
@@ -250,6 +253,7 @@ window.OFI_INIT = function () {
       const foraT = FORA_T.includes(vals.tipo || (id && S.data.fichas.get(id)?.tipo));
       if (!foraT) ['localNome', 'localMorada', 'localCp', 'localCidade', 'localCoords', 'localTelefone'].forEach(k => delete vals[k]);
       const rec = T('recebidaEm'); delete vals.recebidaEm;
+      if ((vals.tipo || (id && S.data.fichas.get(id)?.tipo)) === 'interna') { if (!vals.entidade || !S.data.entidades.get(vals.entidade)?.interna) vals.entidade = await entInterna(); vals.proprietario = (emp().nome || '') + ' · material da casa'; vals.prevista = null; }
       if (rec && !foraT) { const ant = id ? (S.data.fichas.get(id)?.entrada || '').slice(0, 10) : ''; if (rec !== ant) vals.entrada = rec === TODAY() && !id ? new Date().toISOString() : new Date(rec + 'T12:00').toISOString(); }
       const ln = T('localNome'), lv = { morada: T('localMorada'), cp: T('localCp'), localidade: T('localCidade'), coords: T('localCoords'), telefone: T('localTelefone') };
       ['localNome', 'localMorada', 'localCp', 'localCidade', 'localCoords', 'localTelefone'].forEach(k => delete vals[k]);
@@ -271,6 +275,7 @@ window.OFI_INIT = function () {
   const st = document.createElement('style');
   st.textContent = `
 .of-est{display:flex;flex-wrap:wrap;gap:6px}
+.of-interna .acts,.of-interna [data-act=ofiAviso],.of-interna [data-act=ofiLink],.of-interna [data-act=ofiDocMenu],.of-interna [data-act=ofiPdfUm],.of-interna [data-act=ofiGarT],.of-interna [data-act=ofiGar],.of-interna .panel:has([data-act=ofiAss]),.of-interna .panel:has([data-act=ofiOrc]),.of-interna .panel:has([data-act=ofiOrcE]),.of-interna .of-alert:has([data-act=ofiGar]),.of-interna .of-row2:has([data-act=ofiGarT]),.of-interna .of-est [data-c=orcamento]{display:none!important}
 .of-crono{font-size:40px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.02em;line-height:1.1}
 .of-big{min-height:54px;font-size:16px;flex:1}
 .of-row2{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
@@ -1152,6 +1157,7 @@ a.btn.pri{color:#fff}
         ${VS.map((x, i) => `<div class="row"><span class="rt"><span class="r1">${fDY(x.data)} · não resolvido</span><span class="r2">${esc(x.motivo || '')}${x.km != null ? ' · ' + fmtKm(x.km) + ' km' : ''}${x.tecnico ? ' · ' + esc(tecNome(x.tecnico)) : ''}</span></span><span class="rr" style="display:flex;gap:6px;align-items:center">${x.culpa === 'nossa' ? badge('Não cobrada', 'mute') : x.culpa === 'cliente' ? badge('Cobrada', 'ok') : badge('Decidir ao faturar', 'warn')}${ro || !S.verValores ? '' : `<select data-ofculpa="${f.id}" data-i="${i}" aria-label="Responsabilidade"><option value="">Decidir depois</option><option value="cliente" ${x.culpa === 'cliente' ? 'selected' : ''}>Do cliente</option><option value="nossa" ${x.culpa === 'nossa' ? 'selected' : ''}>Nossa</option></select>`}</span></div>`).join('')}
         ${ro || fechada(f) ? (VS.length ? '' : '<p class="note" style="margin:0">Uma só visita.</p>') : `<button class="btn" data-act="ofiVoltar" data-id="${f.id}">${ic('clock', 16)}Não resolvido · voltar cá</button>`}</div></div>`; }
     const alvo = '<div class="panel"><div class="ph"><h2>Tempo de trabalho</h2>';
+    if (interna(f)) h = h.replace('<div class="pg">', '<div class="pg of-interna">');
     return h.includes(alvo) ? h.replace(alvo, ex + alvo) : h;
   };
   document.addEventListener('change', e => { const id = e.target?.dataset?.ofculpa; if (id) ACT.ofiCulpa({ id, i: e.target.dataset.i, c: e.target.value }); });

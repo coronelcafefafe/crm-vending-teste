@@ -38,7 +38,7 @@ window.OFI_INIT = function () {
     ['avisos', 'Avisos automáticos', 'Email e WhatsApp enviados pelo servidor', 'integra']];
   const PLANOS = { base: ['Base', []], profissional: ['Profissional', ['fora', 'ativos', 'armazenamento', 'stock', 'garantias', 'link']], empresa: ['Empresa', MODS.map(m => m[0])] };
   const temMod = k => (cfg().modulos || {})[k] !== false;
-  const VMOD = { rotaof: 'fora', ativos: 'ativos', encomendarp: 'stock', stock: 'stock', equip: 'garantias', equipum: 'garantias', planear: 'planeamento', tempos: 'planeamento', tecnicosof: 'rendimento' };
+  const VMOD = { fulfil: 'armazenamento', rotaof: 'fora', ativos: 'ativos', encomendarp: 'stock', stock: 'stock', equip: 'garantias', equipum: 'garantias', planear: 'planeamento', tempos: 'planeamento', tecnicosof: 'rendimento' };
   SO_VALORES.push('modulos', 'marca');
   window.MODV = v => v === 'empresas' ? !!S.super : (!VMOD[v] || temMod(VMOD[v]));
   /* ---------- empresa (várias empresas na mesma base) e marca ---------- */
@@ -124,7 +124,8 @@ window.OFI_INIT = function () {
     const gratisAte = addD(base, +(c.armGratis ?? 0) || 0), desde = c.armInicio && c.armInicio > gratisAte ? c.armInicio : gratisAte, ate = (f.entregueEm || '').slice(0, 10) || TODAY();
     const dias = Math.max(0, difD(desde, ate)), un = c.armModo === 'mes' ? Math.ceil(dias / 30) : dias, maq = f.equipamento === 'Máquina completa';
     const preco = +(maq ? c.armPrecoMaq : c.armPrecoPeca) || 0;
-    return { desde, gratisAte, dias, un, uL: c.armModo === 'mes' ? (un === 1 ? 'mês' : 'meses') : (un === 1 ? 'dia' : 'dias'), preco, valor: un * preco, semPreco: !preco, aContar: TODAY() >= desde };
+    const FT = f.armFaturado || [], fDias = FT.reduce((s, x) => s + (+x.dias || 0), 0), fUn = FT.reduce((s, x) => s + (+x.un || 0), 0), pendUn = Math.max(0, un - fUn), uLx = n => c.armModo === 'mes' ? (n === 1 ? 'mês' : 'meses') : (n === 1 ? 'dia' : 'dias');
+    return { desde, gratisAte, dias, un, uL: uLx(un), preco, valor: un * preco, semPreco: !preco, aContar: TODAY() >= desde, fDias, fUn, pendUn, pendL: uLx(pendUn), pendValor: pendUn * preco };
   }
   function valores(f) {
     const min = minutos(f), fmin = faturaMin(f, min), mo = fmin / 60 * precoH(f);
@@ -136,7 +137,7 @@ window.OFI_INIT = function () {
     const TR = f.trocas || [], trMin = TR.reduce((s, x) => s + (+x.min || 0), 0), trMo = trMin / 60 * precoH(f), trPc = TR.reduce((s, x) => s + (x.pecas || []).reduce((a, p) => a + (+p.qt || 0) * (+p.preco || 0), 0), 0);
     const pc = (f.pecas || []).reduce((s, p) => s + (+p.qt || 0) * (+p.preco || 0), 0);
     const base = mo + (d?.valor || 0) + pc + trMo + trPc;
-    const arm = armCalc(f), total = (f.emGarantia || f.tipo === 'interna' ? 0 : base) + (arm?.valor || 0);
+    const arm = armCalc(f), total = (f.emGarantia || f.tipo === 'interna' ? 0 : base) + (arm ? arm.pendValor : 0);
     return { min, fmin, mo, desl: d, pc, arm, trMin, trMo, trPc, vPend, total, custo: base, custoGar: f.emGarantia ? base : 0 };
   }
 
@@ -149,6 +150,7 @@ window.OFI_INIT = function () {
   }
 
   /* ---------- navegação, títulos, formulários ---------- */
+  P.pallet = 'M3 15h18M3 20h18M5 15v5M12 15v5M19 15v5M6 4h12v11H6zM10 4v4h4V4';
   P.swap = 'M4 8h13l-3-3M20 16H7l3 3';
   P.link = 'M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1';
   P.book = 'M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5zM4 19a2 2 0 0 1 2-2h13';
@@ -165,12 +167,12 @@ window.OFI_INIT = function () {
   const tirar = ['leads', 'visitas', 'avencas', 'pedidos', 'pendentes', 'rota', 'compras', 'assistente'];
   for (let i = NAV.length - 1; i >= 0; i--) if (tirar.includes(NAV[i][0])) NAV.splice(i, 1);
   for (let i = NAV.length - 1; i >= 0; i--) if (['maquinas', 'mapa'].includes(NAV[i][0])) NAV.splice(i, 1);
-  NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['planear', 'Planear trabalho', 'cal'], ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route'], ['ativos', 'Ativos dos clientes', 'box'], ['trocas', 'Peças de troca (revisões)', 'swap'], ['equip', 'Histórico máquinas', 'serial']);
+  NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['planear', 'Planear trabalho', 'cal'], ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route'], ['ativos', 'Ativos dos clientes', 'box'], ['trocas', 'Peças de troca (revisões)', 'swap'], ['fulfil', 'Fulfillment', 'pallet'], ['equip', 'Histórico máquinas', 'serial']);
   const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['encomendarp', 'Peças a encomendar', 'box'], ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro'], ['modulos', 'Plano e módulos', 'grid'], ['marca', 'Empresa e marca', 'edit'], ['empresas', 'Empresas (superadmin)', 'users']);
   for (let i = NAV.length - 1; i > 0; i--) if (NAV[i][0] === 'sep' && (NAV[i - 1][0] === 'sep' || i === NAV.length - 1)) NAV.splice(i, 1);
   SO_VALORES.push('ofcfg', 'tecnicosof');
   TABS.splice(0, TABS.length, ['inicio', 'Início', 'home'], ['meudia', 'O meu dia', 'clock'], ['oficina', 'Oficina', 'tool'], ['clientes', 'Clientes', 'users'], ['mais', 'Mais', 'menu']);
-  Object.assign(TITLES, { trocas: 'Peças de troca', marca: 'Empresa e marca', empresas: 'Empresas', modulos: 'Plano e módulos', equip: 'Histórico máquinas', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
+  Object.assign(TITLES, { trocas: 'Peças de troca', marca: 'Empresa e marca', empresas: 'Empresas', modulos: 'Plano e módulos', fulfil: 'Fulfillment', equip: 'Histórico máquinas', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
   Object.defineProperty(TITLES, 'ofi', { get() { const f = S.data.fichas.get(S.params?.id); return f ? 'Ficha ' + cod(f) : 'Ficha'; } });
   const nc0 = navCounts; navCounts = () => ({ ...nc0(), oficina: D('fichas').filter(f => f.tipo !== 'guarda' && ABERTOS.includes(f.estado)).length });
 
@@ -519,7 +521,7 @@ a.btn.pri{color:#fff}
         <tr><td>Mão de obra · ${fmtMin(v.fmin)} a faturar (tempo real ${fmtMin(v.min)}${fora(f) ? ', mínimo ' + fmtMin(cfg().minimoForaMin ?? 60) + ' fora' : ', mínimo ' + fmtMin(cfg().minimoOficinaMin ?? 30) + ' na oficina'}) × ${eur(precoH(f))}/h</td><td class="num">${eur(v.mo)}</td></tr>
         ${fora(f) ? `<tr><td>Deslocação${v.desl ? ' · ' + esc(v.desl.txt) : ' · falta a localização ou os km'}</td><td class="num">${eur(v.desl?.valor || 0)}</td></tr>` : ''}
         <tr><td>Peças · ${(f.pecas || []).reduce((s, p) => s + (+p.qt || 0), 0)} un</td><td class="num">${eur(v.pc)}</td></tr>
-        ${v.arm ? `<tr><td>Armazenamento · ${v.arm.aContar ? `${v.arm.un} ${v.arm.uL} desde ${fDY(v.arm.desde)}` : `grátis até ${fDY(v.arm.desde)}`}${v.arm.semPreco ? ' · sem preço definido' : ' × ' + eur(v.arm.preco)}</td><td class="num">${eur(v.arm.valor)}</td></tr>` : ''}${f.emGarantia ? `<tr><td>Coberto pela garantia (custo interno ${eur(v.custoGar)})</td><td class="num">− ${eur(v.custoGar)}</td></tr>` : ''}<tr><td><b>Total sem IVA</b></td><td class="num"><b>${eur(v.total)}</b></td></tr></tbody></table>
+        ${v.arm ? `<tr><td>Armazenamento · ${v.arm.aContar ? `${v.arm.un} ${v.arm.uL} desde ${fDY(v.arm.desde)}` : `grátis até ${fDY(v.arm.desde)}`}${v.arm.semPreco ? ' · sem preço definido' : ' × ' + eur(v.arm.preco)}${v.arm.fUn ? ` · ${v.arm.fUn} ${v.arm.fUn === 1 ? (cfg().armModo === 'mes' ? 'mês' : 'dia') : (cfg().armModo === 'mes' ? 'meses' : 'dias')} já faturado${v.arm.fUn === 1 ? '' : 's'} no fecho mensal (${(f.armFaturado || []).map(x => mesTxt(x.mes)).join(', ')}), falta${v.arm.pendUn === 1 ? '' : 'm'} ${v.arm.pendUn}` : ''}</td><td class="num">${eur(v.arm.pendValor)}</td></tr>` : ''}${f.emGarantia ? `<tr><td>Coberto pela garantia (custo interno ${eur(v.custoGar)})</td><td class="num">− ${eur(v.custoGar)}</td></tr>` : ''}<tr><td><b>Total sem IVA</b></td><td class="num"><b>${eur(v.total)}</b></td></tr></tbody></table>
         ${ro ? '' : `<label class="tog"><input type="checkbox" data-offat="${f.id}" ${f.faturado ? 'checked' : ''}><span>Já está faturado</span></label>`}</div></div>`;
     }
     return h + `</div>`;
@@ -562,7 +564,7 @@ a.btn.pri{color:#fff}
         <div class="fld" style="grid-column:1/-1"><b>Taxa de armazenamento</b><span class="note" style="display:block">Para o que fica na empresa depois de pronto (ou desde a entrada, nas máquinas só guardadas). Cada empresa define as suas regras.</span></div>
         <div class="fld"><label for="cf-am">Cobrar</label><select id="cf-am">${[['nao', 'Não cobrar'], ['dia', 'Por dia'], ['mes', 'Por mês (30 dias)']].map(([k, l]) => `<option value="${k}" ${(c.armModo || 'nao') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         <div class="fld"><label for="cf-ai">A partir de</label><input id="cf-ai" type="date" value="${esc(c.armInicio || '')}"></div>
-        <div class="fld"><label for="cf-ag">Dias grátis</label><input id="cf-ag" type="number" step="1" value="${c.armGratis ?? 15}"></div>
+        <div class="fld"><label for="cf-ag">Dias grátis</label><input id="cf-ag" type="number" step="1" value="${c.armGratis ?? 8}"></div>
         <div class="fld"><label for="cf-aav">Avisar o cliente (dias antes)</label><input id="cf-aav" type="number" step="1" value="${c.armAvisoDias ?? 3}"></div>
         <div class="fld"><label for="cf-apm">Preço máquina completa (€ s/ IVA)</label><input id="cf-apm" type="number" step="0.01" value="${c.armPrecoMaq ?? ''}"></div>
         <div class="fld"><label for="cf-app">Preço peça (€ s/ IVA)</label><input id="cf-app" type="number" step="0.01" value="${c.armPrecoPeca ?? ''}"></div>
@@ -637,12 +639,63 @@ a.btn.pri{color:#fff}
     C.sort((a, b) => b.L.length - a.L.length || a.nome.localeCompare(b.nome, 'pt'));
     const resumo = L => { const k = new Map(); L.forEach(f => { const n = f.equipamento || 'Outro'; k.set(n, (k.get(n) || 0) + 1); }); return [...k.entries()].map(([n, x]) => `${x} × ${n}`).join(' · '); };
     return `<div class="pg">${roBanner()}
-      <div class="mini"><div><span>Clientes com material cá</span><b>${m.size}</b></div>${S.verValores && temMod('armazenamento') && A.some(f => armCalc(f)?.valor) ? `<div><span>Armazenamento acumulado</span><b>${eur(A.reduce((s, f) => s + (armCalc(f)?.valor || 0), 0))}</b></div>` : ''}<div><span>Itens na empresa</span><b>${A.length}</b></div><div><span>Em guarda</span><b>${A.filter(f => f.tipo === 'guarda').length}</b></div><div><span>Em reparação / prontos</span><b>${A.filter(f => f.tipo === 'oficina').length}</b></div></div>
+      <div class="mini"><div><span>Clientes com material cá</span><b>${m.size}</b></div>${S.verValores && temMod('armazenamento') && A.some(f => armCalc(f)?.pendValor) ? `<div><span>Armazenamento acumulado</span><b>${eur(A.reduce((s, f) => s + (armCalc(f)?.pendValor || 0), 0))}</b></div>` : ''}<div><span>Itens na empresa</span><b>${A.length}</b></div><div><span>Em guarda</span><b>${A.filter(f => f.tipo === 'guarda').length}</b></div><div><span>Em reparação / prontos</span><b>${A.filter(f => f.tipo === 'oficina').length}</b></div></div>
       <div class="tb"><div class="tbr"><label class="srch">${ic('search', 18)}<input id="q-ativos" data-q="ativos" type="search" placeholder="Cliente, equipamento, código ou n.º de série" value="${esc(S.q.ativos || '')}" autocomplete="off"></label>${S.canWrite ? `<button class="btn" data-act="ofiNew" data-preset='{"tipo":"guarda","equipamento":"Máquina completa"}'>${ic('box', 18)}<span>Guardar máquina</span></button>` : ''}</div></div>
       <p class="note" style="margin:0">Só aparecem clientes com alguma coisa na empresa (em reparação, pronta por levantar ou em guarda). ${temMod('armazenamento') && cfg().armModo && cfg().armModo !== 'nao' ? `Taxa de armazenamento ${cfg().armModo === 'mes' ? 'ao mês' : 'ao dia'}${cfg().armInicio ? ' a partir de ' + fDY(cfg().armInicio) : ''}, depois de ${cfg().armGratis ?? 0} dias grátis.` : 'Os dias contam desde a entrada.'}</p>
       ${C.length ? C.map(c => { const ab = !!q || (S.atvAb || new Set()).has(c.id); return `<div class="panel"><div class="ph" role="button" tabindex="0" data-act="atvTog" data-id="${c.id}" style="cursor:pointer;gap:10px" aria-expanded="${ab}"><h2 style="flex:1;min-width:0">${esc(c.nome)} <span class="note" style="font-weight:500">· ${c.L.length} ${c.L.length === 1 ? 'item' : 'itens'}</span></h2><span class="note" style="text-align:right">${esc(resumo(c.L))}</span>${ic(ab ? 'up' : 'down', 20)}</div>${!ab ? '' : `<div class="pb" style="padding-top:0;padding-bottom:6px"><a href="#" class="note" data-act="ofiCli" data-id="${c.id}">Abrir ficha do cliente</a></div>` + c.L.map(f => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero ?? "•"}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}</span><span class="r2">${esc([cod(f), f.nSerie ? 'S/N ' + f.nSerie : '', 'entrou ' + fDY(f.entrada)].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(estL(f), EST_T[f.estado])}<span class="note" style="${dias(f) > 90 ? 'color:var(--bad);font-weight:500' : ''}">${dias(f)} d</span>${(() => { const r = armCalc(f); if (!r) return ''; const av = f.armAvisoEm ? `<span class="note">avisado ${fDY(f.armAvisoEm)}</span>` : ''; return av + (r.aContar ? `<span class="note" style="color:#B45309">taxa ${r.un} ${r.uL}${S.verValores && !r.semPreco ? ' · ' + eur(r.valor) : ''}</span>` : `<span class="note">grátis até ${fDY(r.desde)}</span>`); })()}</span></div>`).join('')}</div>`; }).join('') : '<div class="panel empty"><b>Nenhum cliente tem material na empresa</b></div>'}
     </div>`;
   });
+  /* ---------- Fulfillment: máquinas e peças de clientes em armazém + faturação mensal dos dias ---------- */
+  const ymAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number), d = new Date(y, m - 1 + n, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+  const mesTxt = ym => { const t = new Date(ym + '-15T12:00').toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' }); return t.charAt(0).toUpperCase() + t.slice(1); };
+  function armMes(f, ym) {
+    const r = armCalc(f); if (!r) return null;
+    const ms = ym + '-01', nx = ymAdd(ym, 1) + '-01', ate = (f.entregueEm || '').slice(0, 10) || TODAY();
+    const s = r.desde > ms ? r.desde : ms, e = ate < nx ? ate : nx, dias = Math.max(0, difD(s, e)), un = cfg().armModo === 'mes' ? (dias > 0 ? 1 : 0) : dias;
+    const ja = (f.armFaturado || []).find(x => x.mes === ym), pendUn = Math.max(0, un - (+ja?.un || 0));
+    return { r, de: s, a: dias ? addD(e, -1) : s, dias, un, ja, pendUn, pendDias: Math.max(0, dias - (+ja?.dias || 0)), pendValor: pendUn * r.preco };
+  }
+  const emArmazem = f => naCasa(f) && (f.tipo === 'guarda' || f.estado === 'pronto');
+  VIEWS.fulfil = () => loadingOr(() => {
+    const c = cfg(), CH = ['Em armazém', 'Faturar mês'], ch = CH.includes(S.f.fulfil) ? S.f.fulfil : CH[0], q = norm(S.q.fulfil || ''), V = S.verValores;
+    const ym = S.fuMes || TODAY().slice(0, 7), emCurso = ym === TODAY().slice(0, 7), ab = k => !!q || (S.fuAb || new Set()).has(k);
+    const procura = f => !q || norm(entName(f.entidade) + ' ' + nomeEq(f) + ' ' + cod(f) + ' ' + (f.nSerie || '')).includes(q);
+    const grupos = L => { const m = new Map(); L.forEach(f => { if (!m.has(f.entidade)) m.set(f.entidade, []); m.get(f.entidade).push(f); }); return [...m.entries()].map(([id, L]) => ({ id, nome: entName(id), L: L.sort((a, b) => (a.entrada || '').localeCompare(b.entrada || '')) })).sort((a, b) => b.L.length - a.L.length || a.nome.localeCompare(b.nome, 'pt')); };
+    const regra = c.armModo && c.armModo !== 'nao' ? `Conta ${c.armModo === 'mes' ? 'ao mês' : 'ao dia'} depois de ${c.armGratis ?? 0} dias grátis (desde a entrada nas máquinas em guarda, desde «pronto» nas reparações por levantar)${c.armInicio ? `, nunca antes de ${fDY(c.armInicio)}` : ''}.` : 'A taxa de armazenamento está desligada em Preços e deslocações.';
+    const cab = (k, nome, extra, dir) => `<div class="ph" role="button" tabindex="0" data-act="fuTog" data-k="${esc(k)}" style="cursor:pointer;gap:10px" aria-expanded="${ab(k)}"><h2 style="flex:1;min-width:0">${esc(nome)} ${extra}</h2>${dir}${ic(ab(k) ? 'up' : 'down', 20)}</div>`;
+    let corpo = '', mini = '';
+    if (ch === 'Em armazém') {
+      const A = D('fichas').filter(emArmazem), G = grupos(A.filter(procura)), R = A.map(armCalc).filter(Boolean);
+      mini = `<div><span>Clientes</span><b>${new Set(A.map(f => f.entidade)).size}</b></div><div><span>Máquinas</span><b>${A.filter(f => f.equipamento === 'Máquina completa').length}</b></div><div><span>Peças</span><b>${A.filter(f => f.equipamento !== 'Máquina completa').length}</b></div><div><span>Já a contar</span><b>${R.filter(r => r.aContar).length}</b></div>${V ? `<div><span>Por faturar</span><b>${eur(R.reduce((s, r) => s + r.pendValor, 0))}</b></div>` : ''}`;
+      corpo = G.length ? G.map(g => { const RR = g.L.map(armCalc).filter(Boolean), pd = RR.reduce((s, r) => s + r.pendUn, 0);
+        return `<div class="panel">${cab('a:' + g.id, g.nome, `<span class="note" style="font-weight:500">· ${g.L.length} ${g.L.length === 1 ? 'item' : 'itens'}</span>`, `<span class="note" style="text-align:right">${pd ? `${pd} ${c.armModo === 'mes' ? (pd === 1 ? 'mês' : 'meses') : (pd === 1 ? 'dia' : 'dias')} a faturar${V ? ' · ' + eur(RR.reduce((s, r) => s + r.pendValor, 0)) : ''}` : 'nada a contar'}</span>`)}${!ab('a:' + g.id) ? '' : g.L.map(f => { const r = armCalc(f), ca = difD((f.entrada || TODAY()).slice(0, 10), TODAY());
+          return `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero ?? '•'}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}</span><span class="r2">${esc([cod(f), f.nSerie ? 'S/N ' + f.nSerie : '', f.tipo === 'guarda' ? 'em guarda' : 'reparação pronta por levantar', 'entrou ' + fDY(f.entrada)].filter(Boolean).join(' · '))}</span></span><span class="rr"><span class="note">${ca} ${ca === 1 ? 'dia' : 'dias'} cá</span>${!r ? '' : r.aContar ? `<span class="note" style="color:#B45309;font-weight:500">${r.pendUn} ${r.pendL} a faturar${V && !r.semPreco ? ' · ' + eur(r.pendValor) : ''}</span>${r.fUn ? `<span class="note">${r.fUn} já faturado${r.fUn === 1 ? '' : 's'}</span>` : ''}` : `<span class="note">grátis até ${fDY(addD(r.desde, -1))}</span>`}</span></div>`; }).join('')}</div>`; }).join('') : '<div class="panel empty"><b>Não há máquinas nem peças de clientes em armazém</b>As fichas «Guarda» e as reparações prontas por levantar aparecem aqui.</div>';
+    } else {
+      const M = D('fichas').filter(f => !f.faturado && f.estado !== 'cancelado').map(f => ({ f, m: armMes(f, ym) })).filter(x => x.m && x.m.dias > 0), G = grupos(M.filter(x => procura(x.f)).map(x => x.f)), mm = new Map(M.map(x => [x.f.id, x.m]));
+      const pend = M.filter(x => x.m.pendUn > 0), podeFat = S.canWrite && V;
+      mini = `<div><span>Clientes</span><b>${new Set(M.map(x => x.f.entidade)).size}</b></div><div><span>Itens com dias</span><b>${M.length}</b></div><div><span>${c.armModo === 'mes' ? 'Meses' : 'Dias'} a faturar</span><b>${pend.reduce((s, x) => s + x.m.pendUn, 0)}</b></div>${V ? `<div><span>Valor</span><b>${eur(pend.reduce((s, x) => s + x.m.pendValor, 0))}</b></div>` : ''}`;
+      corpo = `<div class="panel"><div class="pb" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><button class="btn sm" data-act="fuMes" data-n="-1" aria-label="Mês anterior">‹</button><b style="min-width:150px;text-align:center">${mesTxt(ym)}</b><button class="btn sm" data-act="fuMes" data-n="1" aria-label="Mês seguinte" ${emCurso ? 'disabled' : ''}>›</button><span class="note" style="flex:1">${emCurso ? 'Mês ainda a decorrer: os dias contam até hoje. Fature no fim do mês.' : 'Dias de armazém deste mês, por cliente.'}</span>${podeFat && pend.length ? `<button class="btn pri" data-act="fuFat" data-ids="${pend.map(x => x.f.id).join(',')}">Marcar tudo como faturado</button>` : ''}</div></div>` +
+        (G.length ? G.map(g => { const P0 = g.L.filter(f => mm.get(f.id).pendUn > 0), tu = P0.reduce((s, f) => s + mm.get(f.id).pendUn, 0);
+          return `<div class="panel">${cab('m:' + g.id, g.nome, `<span class="note" style="font-weight:500">· ${g.L.length} ${g.L.length === 1 ? 'item' : 'itens'}</span>`, `<span class="note" style="text-align:right">${tu ? `${tu} ${c.armModo === 'mes' ? (tu === 1 ? 'mês' : 'meses') : (tu === 1 ? 'dia' : 'dias')}${V ? ' · <b>' + eur(P0.reduce((s, f) => s + mm.get(f.id).pendValor, 0)) + '</b>' : ''}` : badge('Faturado', 'ok')}</span>`)}${!ab('m:' + g.id) ? '' : (podeFat && P0.length ? `<div class="pb" style="padding-top:0"><button class="btn sm pri" data-act="fuFat" data-ids="${P0.map(f => f.id).join(',')}">Marcar ${esc(g.nome)} como faturado</button></div>` : '') + g.L.map(f => { const m = mm.get(f.id);
+            return `<div class="row"><span class="of-n">${f.numero ?? '•'}</span><span class="rt" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="r1">${esc(nomeEq(f))}</span><span class="r2">${esc([cod(f), f.nSerie ? 'S/N ' + f.nSerie : '', `de ${fDY(m.de)} a ${fDY(m.a)}`, f.entregueEm ? 'saiu ' + fDY(f.entregueEm) : ''].filter(Boolean).join(' · '))}</span></span><span class="rr"><span class="note">${m.dias} ${m.dias === 1 ? 'dia' : 'dias'}</span>${m.pendUn ? (V && !m.r.semPreco ? `<span class="note" style="color:#B45309;font-weight:500">${eur(m.pendValor)}</span>` : '') : `<span class="note">faturado ${fDY(m.ja.em)}${podeFat ? ` · <a href="#" data-act="fuAnula" data-id="${f.id}">anular</a>` : ''}</span>`}${m.ja && m.pendUn ? `<span class="note">${m.ja.dias} já faturados</span>` : ''}</span></div>`; }).join('')}</div>`; }).join('') : `<div class="panel empty"><b>Sem dias de armazém a faturar em ${esc(mesTxt(ym))}</b>${c.armInicio && ym + '-31' < c.armInicio ? `A taxa só começa a contar a ${fDY(c.armInicio)}.` : ''}</div>`);
+    }
+    return `<div class="pg">${roBanner()}
+      <div class="mini">${mini}</div>
+      <div class="tb"><div class="tbr"><label class="srch">${ic('search', 18)}<input id="q-fulfil" data-q="fulfil" type="search" placeholder="Cliente, máquina, código ou n.º de série" value="${esc(S.q.fulfil || '')}" autocomplete="off"></label>${S.canWrite ? `<button class="btn" data-act="ofiNew" data-preset='{"tipo":"guarda","equipamento":"Máquina completa"}'>${ic('pallet', 18)}<span>Guardar máquina</span></button>` : ''}</div>
+      <div class="chips">${CH.map(x => `<button class="chipb ${x === ch ? 'on' : ''}" data-act="chip" data-v="fulfil" data-c="${x}">${x}</button>`).join('')}</div></div>
+      <p class="note" style="margin:0">${regra}</p>
+      ${corpo}
+    </div>`;
+  });
+  ACT.fuTog = d => { S.fuAb = S.fuAb || new Set(); S.fuAb.has(d.k) ? S.fuAb.delete(d.k) : S.fuAb.add(d.k); render(); };
+  ACT.fuMes = d => { const a = TODAY().slice(0, 7), n = ymAdd(S.fuMes || a, +d.n); S.fuMes = n > a ? a : n; render(); };
+  ACT.fuFat = async d => {
+    if (!S.canWrite || !S.verValores) return; const ym = S.fuMes || TODAY().slice(0, 7), em = new Date().toISOString(), por = S.me?.name || S.me?.email || ''; let n = 0;
+    for (const id of d.ids.split(',')) { const f = fx(id), m = f && armMes(f, ym); if (!m || !m.pendUn) continue;
+      if (await patch('fichas', id, { armFaturado: [...(f.armFaturado || []).filter(x => x.mes !== ym), { mes: ym, dias: m.dias, un: m.un, preco: m.r.preco, valor: m.un * m.r.preco, em, por }] })) n++; }
+    toast(n === 1 ? '1 item marcado como faturado' : n + ' itens marcados como faturados');
+  };
+  ACT.fuAnula = (d, b, e) => { e?.preventDefault?.(); const f = fx(d.id), ym = S.fuMes || TODAY().slice(0, 7); if (!f || !S.canWrite || !S.verValores) return; patch('fichas', f.id, { armFaturado: (f.armFaturado || []).filter(x => x.mes !== ym) }).then(ok => ok && toast('Faturação do mês anulada')); };
   ACT.atvTog = d => { S.atvAb = S.atvAb || new Set(); S.atvAb.has(d.id) ? S.atvAb.delete(d.id) : S.atvAb.add(d.id); render(); };
   ACT.ofiCli = d => go('ficha', { id: d.id });
 
@@ -1084,7 +1137,7 @@ a.btn.pri{color:#fff}
       const desc = `Ficha ${cod(f)} · ${nomeEq(f)}${f.nSerie ? ' S/N ' + f.nSerie : ''}`;
       const g = f.emGarantia;
       if (!g && v.fmin > 0) rows.push([...base, 'MO', 'Mão de obra · ' + desc, n(v.fmin / 60), n(precoH(f)), 23, n(v.mo)]);
-      if (v.arm?.valor) rows.push([...base, 'ARM', `Armazenamento · ${v.arm.un} ${v.arm.uL} desde ${fDY(v.arm.desde)}`, n(v.arm.un), n(v.arm.preco), 23, n(v.arm.valor)]);
+      if (v.arm?.pendValor) rows.push([...base, 'ARM', `Armazenamento · ${v.arm.pendUn} ${v.arm.pendL}${v.arm.fUn ? ' (além dos já faturados no fecho mensal)' : ' desde ' + fDY(v.arm.desde)}`, n(v.arm.pendUn), n(v.arm.preco), 23, n(v.arm.pendValor)]);
       if (!g && v.desl) rows.push([...base, 'DESL', 'Deslocação · ' + v.desl.txt, v.desl.n || 1, n(v.desl.unit ?? v.desl.valor), 23, n(v.desl.valor)]);
       if (!g) (f.trocas || []).forEach(x => { if (+x.min) rows.push([...base, 'REV', `Revisão de ${x.equipamento} (peça de troca ${x.codigo})`, n(x.min / 60), n(precoH(f)), 23, n(x.min / 60 * precoH(f))]); (x.pecas || []).forEach(p => rows.push([...base, p.ref || '', `${p.nome} (revisão ${x.codigo})`, n(p.qt), n(p.preco), 23, n(p.qt * p.preco)])); });
       if (!g) (f.pecas || []).forEach(p => rows.push([...base, p.ref || '', p.nome, n(p.qt), n(p.preco), 23, n(p.qt * p.preco)]));

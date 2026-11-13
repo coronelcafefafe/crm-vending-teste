@@ -374,6 +374,7 @@ a.btn.pri{color:#fff}
   const CHIPS = ['Em espera', 'Em curso', 'Prontos', 'Entregues', 'Todas', 'A faturar', 'Tipo'];
   const porFaturar = () => D('fichas').filter(f => f.tipo !== 'interna' && ['pronto', 'entregue'].includes(f.estado) && !f.faturado);
   const resumoEq = L => { const k = new Map(); L.forEach(f => { const n = f.equipamento || 'Outro'; k.set(n, (k.get(n) || 0) + 1); }); return [...k.entries()].map(([n, x]) => `${x} × ${n}`).join(' · '); };
+  ACT.ofOnde = d => { S.ofOnde = d.c || ''; render(); };
   ACT.ofTog = d => { S.ofAb = S.ofAb || new Set(); S.ofAb.has(d.c) ? S.ofAb.delete(d.c) : S.ofAb.add(d.c); render(); };
   // fichas agrupadas por cliente (fechadas; abrem ao tocar no nome)
   function porClienteH(L, velho, aberto) {
@@ -384,9 +385,9 @@ a.btn.pri{color:#fff}
       return `<div class="panel"><div class="ph" role="button" tabindex="0" data-act="ofTog" data-c="${esc(k)}" style="cursor:pointer;gap:10px" aria-expanded="${ab}"><h2 style="flex:1;min-width:0">${esc(g.nome)} <span class="note" style="font-weight:500">· ${g.F.length} ${g.F.length === 1 ? 'ficha' : 'fichas'}</span></h2><span class="note" style="text-align:right">${esc(resumoEq(g.F))}${velho && maxD > 0 ? ` · <span style="color:${maxD > 30 ? 'var(--bad)' : 'inherit'}">há ${maxD} d</span>` : ''}</span>${ic(ab ? 'up' : 'down', 20)}</div>${ab ? g.F.map(fRow).join('') : ''}</div>`; }).join('');
   }
   // por tipo de peça: quantas estão à espera e de quem são
-  function porTipoH() {
+  function porTipoH(okOnde = () => true) {
     const m = new Map();
-    D('fichas').filter(f => f.tipo !== 'guarda' && ESPERA.includes(f.estado) && f.equipamento).forEach(f => { const k = f.equipamento; if (!m.has(k)) m.set(k, []); m.get(k).push(f); });
+    D('fichas').filter(f => f.tipo !== 'guarda' && ESPERA.includes(f.estado) && f.equipamento && okOnde(f)).forEach(f => { const k = f.equipamento; if (!m.has(k)) m.set(k, []); m.get(k).push(f); });
     const G = [...m.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], 'pt'));
     if (!G.length) return '<div class="panel empty"><b>Nada à espera</b></div>';
     return `<p class="note" style="margin:0">Peças e máquinas à espera, agrupadas pelo tipo. Toque num grupo para ver de quem são e há quanto tempo esperam.</p>` + G.map(([k, L]) => { const kk = 't:' + k, ab = (S.ofAb || new Set()).has(kk); L.sort((a, b) => dias(b) - dias(a));
@@ -395,13 +396,13 @@ a.btn.pri{color:#fff}
   }
   VIEWS.oficina = () => loadingOr(() => {
     let c = S.f.oficina || 'Em espera'; if (c.startsWith('eq:')) c = 'Tipo'; if (!CHIPS.includes(c)) c = 'Em espera';
-    const q = (S.q.oficina || '').trim();
-    let L = D('fichas').filter(f => f.tipo !== 'guarda' || c === 'Todas');
+    const q = (S.q.oficina || '').trim(), onde = S.ofOnde || '', okOnde = f => !onde || (onde === 'fora' ? fora(f) : !fora(f));
+    let L = D('fichas').filter(f => (f.tipo !== 'guarda' || c === 'Todas') && okOnde(f));
     if (c === 'Em espera') L = L.filter(f => ESPERA.includes(f.estado));
     else if (c === 'Em curso') L = L.filter(f => CURSO.includes(f.estado));
     else if (c === 'Prontos') L = L.filter(f => f.estado === 'pronto');
     else if (c === 'Entregues') L = L.filter(f => f.estado === 'entregue');
-    else if (c === 'A faturar') L = porFaturar();
+    else if (c === 'A faturar') L = porFaturar().filter(okOnde);
     const velho = !['Entregues', 'Todas'].includes(c);
     L = L.filter(f => match('oficina', f, ['codigo', 'numero', 'proprietario', 'entidade', 'equipamento', 'modelo', 'nSerie', 'avaria'])).sort((a, b) => velho ? (a.entrada || '').localeCompare(b.entrada || '') : byEntrada(a, b));
     const nF = porFaturar().length;
@@ -411,8 +412,9 @@ a.btn.pri{color:#fff}
        <div class="of-row2">${S.verValores && temMod('sage') ? `<button class="btn" data-act="ofiExport" ${nF ? '' : 'disabled'}>${ic('dl', 16)}Excel para faturar</button><button class="btn" data-act="ofiPdfLote" data-c="1" ${nF ? '' : 'disabled'}>${ic('pdf', 16)}PDF com preços</button>` : ''}<button class="btn" data-act="ofiPdfLote" data-c="0" ${nF ? '' : 'disabled'}>${ic('pdf', 16)}PDF sem preços${S.verValores ? ' (para o cliente)' : ''}</button></div></div></div>`; };
     return `<div class="pg">${roBanner()}
      <div class="tb"><div class="tbr"><label class="srch">${ic('search', 18)}<input id="q-oficina" data-q="oficina" type="search" placeholder="N.º da ficha, cliente, peça, n.º de série" value="${esc(S.q.oficina || '')}" autocomplete="off"></label>${S.canWrite ? `<button class="btn pri" data-act="ofiNew">${ic('plus', 18)}<span>Nova ficha</span></button>` : ''}</div>
+     <div class="chips" style="margin-bottom:6px">${[['', 'Tudo'], ['oficina', 'Oficina'], ['fora', 'No cliente']].map(([k, l]) => `<button class="chipb ${onde === k ? 'on' : ''}" data-act="ofOnde" data-c="${k}" style="display:inline-flex;align-items:center;gap:5px">${k === 'oficina' ? ic('tool', 14) : k === 'fora' ? ic('pin', 14) : ''}<span>${l}</span></button>`).join('')}</div>
      <div class="chips">${CHIPS.map(x => `<button class="chipb ${x === c ? 'on' : ''}" data-act="chip" data-v="oficina" data-c="${x}">${x}${x === 'A faturar' && nF ? ` (${nF})` : ''}</button>`).join('')}</div></div>
-     ${c === 'Tipo' ? porTipoH() : `${c === 'A faturar' ? fat() : ''}${velho && L.length ? '<p class="note" style="margin:0">Por cliente, do que está à espera há mais tempo para o mais recente. Toque no nome para ver as fichas.</p>' : ''}
+     ${c === 'Tipo' ? porTipoH(okOnde) : `${c === 'A faturar' ? fat() : ''}${velho && L.length ? '<p class="note" style="margin:0">Por cliente, do que está à espera há mais tempo para o mais recente. Toque no nome para ver as fichas.</p>' : ''}
      ${L.length ? porClienteH(L, velho, !!q) : `<div class="panel empty"><b>${c === 'A faturar' ? 'Nada por faturar' : 'Sem fichas'}</b>${c === 'A faturar' ? '' : 'Crie uma ficha quando entrar uma peça ou máquina.'}</div>`}`}
     </div>`;
   });

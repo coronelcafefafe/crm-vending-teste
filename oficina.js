@@ -165,12 +165,12 @@ window.OFI_INIT = function () {
   const tirar = ['leads', 'visitas', 'avencas', 'pedidos', 'pendentes', 'rota', 'compras', 'assistente'];
   for (let i = NAV.length - 1; i >= 0; i--) if (tirar.includes(NAV[i][0])) NAV.splice(i, 1);
   for (let i = NAV.length - 1; i >= 0; i--) if (['maquinas', 'mapa'].includes(NAV[i][0])) NAV.splice(i, 1);
-  NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['planear', 'Planear trabalho', 'cal'], ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route'], ['ativos', 'Ativos dos clientes', 'box'], ['trocas', 'Peças de troca (revisões)', 'swap'], ['equip', 'Máquinas (n.º de série)', 'serial']);
+  NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['planear', 'Planear trabalho', 'cal'], ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route'], ['ativos', 'Ativos dos clientes', 'box'], ['trocas', 'Peças de troca (revisões)', 'swap'], ['equip', 'Histórico máquinas', 'serial']);
   const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['encomendarp', 'Peças a encomendar', 'box'], ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro'], ['modulos', 'Plano e módulos', 'grid'], ['marca', 'Empresa e marca', 'edit'], ['empresas', 'Empresas (superadmin)', 'users']);
   for (let i = NAV.length - 1; i > 0; i--) if (NAV[i][0] === 'sep' && (NAV[i - 1][0] === 'sep' || i === NAV.length - 1)) NAV.splice(i, 1);
   SO_VALORES.push('ofcfg', 'tecnicosof');
   TABS.splice(0, TABS.length, ['inicio', 'Início', 'home'], ['meudia', 'O meu dia', 'clock'], ['oficina', 'Oficina', 'tool'], ['clientes', 'Clientes', 'users'], ['mais', 'Mais', 'menu']);
-  Object.assign(TITLES, { trocas: 'Peças de troca', marca: 'Empresa e marca', empresas: 'Empresas', modulos: 'Plano e módulos', equip: 'Máquinas por n.º de série', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
+  Object.assign(TITLES, { trocas: 'Peças de troca', marca: 'Empresa e marca', empresas: 'Empresas', modulos: 'Plano e módulos', equip: 'Histórico máquinas', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
   Object.defineProperty(TITLES, 'ofi', { get() { const f = S.data.fichas.get(S.params?.id); return f ? 'Ficha ' + cod(f) : 'Ficha'; } });
   const nc0 = navCounts; navCounts = () => ({ ...nc0(), oficina: D('fichas').filter(f => f.tipo !== 'guarda' && ABERTOS.includes(f.estado)).length });
 

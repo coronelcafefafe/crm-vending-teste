@@ -288,6 +288,13 @@ window.OFI_INIT = function () {
   const st = document.createElement('style');
   st.textContent = `
 .of-est{display:flex;flex-wrap:wrap;gap:6px}
+.of-seg{display:flex;flex-wrap:wrap;gap:6px}
+.of-seg label.chipb{position:relative;cursor:pointer;display:inline-flex;align-items:center;gap:6px;user-select:none}
+.of-seg label.chipb input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
+.of-seg label.chipb::before{content:"";width:14px;height:14px;border-radius:50%;border:2px solid currentColor;opacity:.55;flex:none}
+.of-seg label.chipb:has(input:checked){background:var(--brand);border-color:var(--brand);color:#fff}
+.of-seg label.chipb:has(input:checked)::before{opacity:1;background:#fff;box-shadow:inset 0 0 0 3px var(--brand)}
+.of-seg label.chipb:has(input:focus-visible){outline:2px solid var(--gold);outline-offset:2px}
 .of-interna .acts,.of-interna [data-act=ofiAviso],.of-interna [data-act=ofiLink],.of-interna [data-act=ofiDocMenu],.of-interna [data-act=ofiPdfUm],.of-interna [data-act=ofiGarT],.of-interna [data-act=ofiGar],.of-interna .panel:has([data-act=ofiAss]),.of-interna .panel:has([data-act=ofiOrc]),.of-interna .panel:has([data-act=ofiOrcE]),.of-interna .of-alert:has([data-act=ofiGar]),.of-interna .of-row2:has([data-act=ofiGarT]),.of-interna .of-est [data-c=orcamento]{display:none!important}
 .of-crono{font-size:40px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.02em;line-height:1.1}
 .of-big{min-height:54px;font-size:16px;flex:1}
@@ -1140,7 +1147,7 @@ a.btn.pri{color:#fff}
     <p class="note" style="margin:0">Fica registada a visita de hoje (${fmtKm(f.km ?? 0)} km) e a ficha continua aberta para a próxima visita.</p>
     <div class="fld"><label for="vc-m">Porquê (ex.: falta a peça X)</label><input id="vc-m"></div>
     <div class="fld"><label for="vc-d">Próxima visita</label><input id="vc-d" type="date" value="${esc(addD(TODAY(), 1))}"></div>
-    <div class="fld"><label>De quem é a responsabilidade da visita extra?</label><div class="of-est"><label class="chipb"><input type="radio" name="vc-c" value="" checked> Decidir ao faturar</label><label class="chipb"><input type="radio" name="vc-c" value="cliente"> Do cliente (cobra-se)</label><label class="chipb"><input type="radio" name="vc-c" value="nossa"> Nossa (não se cobra)</label></div></div>
+    <div class="fld"><label>De quem é a responsabilidade da visita extra?</label><div class="of-seg"><label class="chipb"><input type="radio" name="vc-c" value="" checked>Decidir ao faturar</label><label class="chipb"><input type="radio" name="vc-c" value="cliente">Do cliente · cobra-se</label><label class="chipb"><input type="radio" name="vc-c" value="nossa">Nossa · não se cobra</label></div></div>
     <button class="btn pri" data-act="ofiVoltarOk" data-id="${f.id}">Registar e marcar nova visita</button></div>`); };
   ACT.ofiVoltarOk = async d => {
     const f = fx(d.id); if (!f) return; const m = ($('#vc-m')?.value || '').trim(), dt = $('#vc-d')?.value || '', c = document.querySelector('input[name=vc-c]:checked')?.value || null;

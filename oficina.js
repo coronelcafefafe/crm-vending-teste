@@ -213,7 +213,7 @@ window.OFI_INIT = function () {
     { k: 'recebidaEm', l: 'Recebida em', t: 'date', def: '@today' },
     { k: 'equipamento', l: 'O que entrou (escolha ou escreva, ex.: Módulo copos) · uma ficha por peça ou máquina', t: 'text', req: 1, def: 'Máquina completa' },
     { k: 'marca', l: 'Marca', t: 'text', def: 'Necta' },
-    { k: 'modelo', l: 'Modelo da máquina', t: 'sel', get o() { return modelosL(); } },
+    { k: 'modelo', l: 'Modelo da máquina', t: 'text', ph: 'Escolha da lista ou escreva' },
     { k: 'grupo', l: 'Grupo / conjunto (filtra as peças)', t: 'sel', get o() { const s = new Set(); D('artigos').forEach(a => isPeca(a) && a.grupoPeca && s.add(a.grupoPeca)); return [...s].sort((a, b) => a.localeCompare(b, 'pt')); } },
     { k: 'nSerie', l: 'N.º de série', t: 'text' },
     { k: 'localNome', l: 'Assistência fora · nome comercial do local (ex.: Café Avenida)', t: 'text', full: 1 },
@@ -265,7 +265,7 @@ window.OFI_INIT = function () {
     const ph = document.getElementById('f-precoHora')?.closest('.fld'); if (ph) ph.style.display = 'none';
     sel.addEventListener('change', tg); tg();
   }
-  openForm = (col, id, preset) => { const r = of0(col, id, preset); if (col === 'fichas') { try { ajustaFormFicha(id); } catch (_) { }  const i = document.getElementById('f-equipamento'); if (i && !document.getElementById('of-eqL')) { i.setAttribute('list', 'of-eqL'); i.setAttribute('autocomplete', 'off'); i.insertAdjacentHTML('afterend', `<datalist id="of-eqL">${[...new Set([...EQUIP, ...D('fichas').map(f => f.equipamento).filter(Boolean)])].map(x => `<option value="${esc(x)}">`).join('')}</datalist>`); } } return r; };
+  openForm = (col, id, preset) => { const r = of0(col, id, preset); if (col === 'fichas') { try { ajustaFormFicha(id); } catch (_) { }  const mo = document.getElementById('f-modelo'); if (mo && !document.getElementById('of-moL')) { mo.setAttribute('list', 'of-moL'); mo.setAttribute('autocomplete', 'off'); mo.insertAdjacentHTML('afterend', `<datalist id="of-moL">${modelosL().map(x => `<option value="${esc(x)}">`).join('')}</datalist>`); }  const i = document.getElementById('f-equipamento'); if (i && !document.getElementById('of-eqL')) { i.setAttribute('list', 'of-eqL'); i.setAttribute('autocomplete', 'off'); i.insertAdjacentHTML('afterend', `<datalist id="of-eqL">${[...new Set([...EQUIP, ...D('fichas').map(f => f.equipamento).filter(Boolean)])].map(x => `<option value="${esc(x)}">`).join('')}</datalist>`); } } return r; };
   // depois de criar uma ficha, abre-a (fotos, etiqueta, cronómetro)
   const save0 = save;
   save = async (col, id, vals) => {

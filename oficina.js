@@ -167,7 +167,7 @@ window.OFI_INIT = function () {
   const tirar = ['leads', 'visitas', 'avencas', 'pedidos', 'pendentes', 'rota', 'compras', 'assistente'];
   for (let i = NAV.length - 1; i >= 0; i--) if (tirar.includes(NAV[i][0])) NAV.splice(i, 1);
   for (let i = NAV.length - 1; i >= 0; i--) if (['maquinas', 'mapa'].includes(NAV[i][0])) NAV.splice(i, 1);
-  NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['oficina', 'Oficina e assistências', 'tool'], ['rotaof', 'Rota do dia', 'route'], ['ativos', 'Ativos dos clientes', 'box'], ['trocas', 'Peças de troca (revisões)', 'swap'], ['fulfil', 'Fulfillment', 'pallet'], ['equip', 'Histórico máquinas', 'serial']);
+  NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['oficina', 'Oficina e assistências', 'tool'], ['ativos', 'Ativos dos clientes', 'box'], ['trocas', 'Peças de troca (revisões)', 'swap'], ['fulfil', 'Fulfillment', 'pallet'], ['equip', 'Histórico máquinas', 'serial']);
   const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['encomendarp', 'Peças a encomendar', 'box'], ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro'], ['modulos', 'Plano e módulos', 'grid'], ['marca', 'Empresa e marca', 'edit'], ['empresas', 'Empresas (superadmin)', 'users']);
   for (let i = NAV.length - 1; i > 0; i--) if (NAV[i][0] === 'sep' && (NAV[i - 1][0] === 'sep' || i === NAV.length - 1)) NAV.splice(i, 1);
   SO_VALORES.push('ofcfg', 'tecnicosof');
@@ -367,7 +367,7 @@ a.btn.pri{color:#fff}
     ${(() => { if (!S.verValores) return ''; const lim = new Date(Date.now() - 3 * 864e5).toISOString(), L = D('fichas').filter(f => f.orcRespEm && f.orcRespEm >= lim && ABERTOS.includes(f.estado)).sort((a, b) => b.orcRespEm.localeCompare(a.orcRespEm)); return L.length ? `<div class="of-alert" style="border-color:var(--brand)"><span style="flex:1"><b>Respostas a orçamentos</b>${L.map(f => `<br><span class="note">${esc(cod(f))} · ${esc(prop(f))}: <b style="color:${f.orcEstado === 'aceite' ? 'var(--ok,#1a7f4b)' : 'var(--bad)'}">${f.orcEstado === 'aceite' ? 'aceite' : 'recusado'}</b> por ${esc(f.orcRespNome || '')}</span>`).join('')}</span><button class="btn sm" data-act="ofiOpen" data-id="${L[0].id}">Abrir</button></div>` : ''; })()}
     ${(() => { const n = temMod('stock') ? aEncomendar().length : 0; return n ? `<div class="of-alert" style="border-color:#B45309"><span style="flex:1"><b>${n} ${n === 1 ? 'peça precisa' : 'peças precisam'} de ser encomendada${n === 1 ? '' : 's'}</b><br><span class="note">Abaixo do stock mínimo ou em falta para os planos marcados.</span></span><button class="btn sm" data-act="go" data-v="encomendarp">Ver lista</button></div>` : ''; })()}
     ${porAvisar.length ? `<div class="panel"><div class="ph"><h2>Prontos · avisar o cliente</h2></div>${porAvisar.map(fRow).join('')}</div>` : ''}
-    <div class="panel"><div class="ph"><h2>Assistências no cliente</h2><button class="lnk" data-act="go" data-v="rotaof">Ver rota</button></div>${hoje.length ? hoje.map(fRow).join('') : '<div class="empty">Sem assistências por fazer.</div>'}</div>
+    <div class="panel"><div class="ph"><h2>Assistências no cliente</h2><button class="lnk" data-act="go" data-v="meudia">O meu dia</button></div>${hoje.length ? hoje.map(fRow).join('') : '<div class="empty">Sem assistências por fazer.</div>'}</div>
     ${antigos.length ? `<div class="panel"><div class="ph"><h2>Há mais tempo na oficina</h2></div>${antigos.slice(0, 6).map(fRow).join('')}</div>` : ''}
     </div>`;
   });
@@ -1529,27 +1529,27 @@ a.btn.pri{color:#fff}
   ACT.ofiPlanDel = async d => { if (!confirm('Apagar este plano? As fichas voltam a ficar livres.')) return; if (await remove('planos', d.id)) toast('Plano apagado'); };
 
   /* ----- O meu dia ----- */
+  // O meu dia: o trabalho em aberto do técnico (assistências, oficina, revisões), por dia
+  const doTec = (f, t) => { if (!t) return !f.tecnico && !f.resp; if (f.tecnico) return f.tecnico === t.id; if (!f.resp) return false; const em = String(S.data.equipa.get(f.resp)?.email || (f.resp === S.uid ? S.me?.email : '') || '').toLowerCase(); return !!t.email && em === t.email.toLowerCase(); };
   VIEWS.meudia = () => loadingOr(() => {
-    const T = TECS(), eu = meuTec(), tid = S.ofDiaTec || eu?.id || T[0]?.id, dia = S.ofDiaData || TODAY();
-    const PL = D('planos').filter(p => p.tecnico === tid && p.data === dia).sort((a, b) => a.periodo.localeCompare(b.periodo) * -1);
-    const prox = D('planos').filter(p => p.tecnico === tid && p.data > dia && p.estado !== 'feito').sort((a, b) => a.data.localeCompare(b.data))[0];
-    let h = `<div class="pg">${roBanner()}<div class="of-row2">${!eu || S.isAdmin ? `<div class="fld" style="margin:0;min-width:150px"><label for="md-t">Técnico</label><select id="md-t" data-ofdia="tec">${T.map(t => `<option value="${t.id}" ${t.id === tid ? 'selected' : ''}>${esc(t.nome)}</option>`).join('')}</select></div>` : `<h2 style="margin:0;flex:1">${esc(eu.nome)}</h2>`}<div class="fld" style="margin:0;width:170px"><label for="md-d">Dia</label><input id="md-d" type="date" data-ofdia="data" value="${dia}"></div></div>`;
-    if (!PL.length) return h + `<div class="panel empty"><b>Sem plano para este dia</b>${prox ? `<br><button class="btn sm" style="margin-top:10px" data-act="ofiPlanVer" data-id="${prox.id}">Ver o próximo: ${fDY(prox.data)}</button>` : ''}</div></div>`;
-    PL.forEach(p => {
-      const L = p.lotes || [], est = L.reduce((a, l) => a + (+l.est || 0), 0);
-      const F = L.flatMap(l => l.fichas || []).map(id => S.data.fichas.get(id)).filter(Boolean), feitas = F.filter(fechada);
-      const real = L.reduce((a, l) => a + (+l.min || 0), 0), estFeitas = feitas.reduce((a, f) => a + estimativa(f.equipamento, tid).min, 0);
-      const rend = real >= 10 && feitas.length ? Math.round(estFeitas / real * 100) : null;
-      h += `<div class="mini"><div><span>${PER[p.periodo]}</span><b>${feitas.length} de ${F.length} fichas</b></div><div><span>Planeado</span><b>${fmtMin(est)}</b></div><div><span>Tempo gasto</span><b>${fmtMin(real)}</b></div><div><span>Rendimento</span><b style="color:${rend == null ? 'inherit' : rend >= 100 ? 'var(--ok,#1a7f4b)' : rend < 80 ? 'var(--bad)' : 'inherit'}">${rend == null ? '—' : rend + ' %'}</b></div></div>`;
-      h += pecasH(L, p);
-      L.forEach((l, i) => {
-        const corre = l.ini && !l.fim, abertas = (l.fichas || []).map(id => S.data.fichas.get(id)).filter(f => f && !fechada(f)).length;
-        const bot = S.canWrite ? `<div class="pb"><div class="of-row2">${corre ? `<div style="flex:1"><div class="of-crono" id="ofcrono" data-ini="${esc(l.ini)}">00:00:00</div><span class="note">Lote a contar desde ${fD(l.ini)}</span></div><button class="btn pri of-big of-stop" style="flex:0 0 190px" data-act="ofiLoteStop" data-id="${p.id}" data-i="${i}">${ic('clock', 18)}Parar lote</button>` : abertas ? `<button class="btn pri of-big" data-act="ofiLoteStart" data-id="${p.id}" data-i="${i}">${ic('clock', 18)}Iniciar lote (${abertas} ${abertas === 1 ? 'ficha' : 'fichas'})</button>` : `<span class="note">Lote concluído${l.min != null ? ' em ' + fmtMin(l.min) : ''}.</span>`}</div></div>` : '';
-        h += loteH(l, i, tid, bot);
-      });
-      if (S.canWrite && p.estado !== 'feito' && F.length && feitas.length === F.length) h += `<div><button class="btn" data-act="ofiPlanFim" data-id="${p.id}">Fechar o plano</button></div>`;
-    });
-    return h + '</div>';
+    const T = TECS(), eu = meuTec(), tid = S.ofDiaTec || eu?.id || T[0]?.id || '_sem', t = tid === '_sem' ? null : S.data.tecnicos.get(tid), dia = S.ofDiaData || TODAY(), amanha = addD(dia, 1);
+    const L = D('fichas').filter(f => ABERTOS.includes(f.estado) && f.tipo !== 'guarda' && doTec(f, t));
+    const dt = f => (f.prevista || '').slice(0, 10), ord = (a, b) => (dt(a) || '9').localeCompare(dt(b) || '9') || (a.numero || 0) - (b.numero || 0);
+    const G = [
+      ['Em curso', L.filter(f => f.estado === 'reparacao')],
+    ];
+    const resto = L.filter(f => !G[0][1].includes(f));
+    G.push(['Atrasadas', resto.filter(f => dt(f) && dt(f) < dia)], [dia === TODAY() ? 'Hoje' : fDY(dia), resto.filter(f => dt(f) === dia)], [dia === TODAY() ? 'Amanhã' : fDY(amanha), resto.filter(f => dt(f) === amanha)], ['Próximos dias', resto.filter(f => dt(f) > amanha)], ['Pendentes sem data', resto.filter(f => !dt(f))]);
+    const hoje = G[2][1].concat(G[0][1]).filter(f => fora(f) && ondeXY(f)), c = cfg();
+    const pts = hoje.map(f => { const x = ondeXY(f); return x.lat + ',' + x.lng; });
+    const gm = pts.length && c.baseLat ? `https://www.google.com/maps/dir/?api=1&origin=${c.baseLat},${c.baseLng}&destination=${c.baseLat},${c.baseLng}&waypoints=${encodeURIComponent(pts.join('|'))}&travelmode=driving` : '';
+    const lin = f => { const xy = fora(f) && ondeXY(f), onde = fora(f) ? ondeTxt(f) || (ent(f.entidade)?.localidade || '') : '';
+      return `<div class="row"><span class="of-n">${f.numero ?? '•'}</span><span class="rt" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="r1">${esc(prop(f))} · ${esc(nomeEq(f))}</span><span class="r2">${esc([cod(f), TIPO_C[f.tipo], onde, dt(f) ? 'para ' + fDY(dt(f)) : ''].filter(Boolean).join(' · '))}</span></span><span class="rr">${badge(estL(f), EST_T[f.estado])}${xy ? `<a class="btn sm" href="https://www.google.com/maps/dir/?api=1&destination=${xy.lat},${xy.lng}&travelmode=driving" target="_blank" rel="noopener">${ic('route', 14)}Ir</a>` : ''}</span></div>`; };
+    const sel = `<div class="fld" style="margin:0;min-width:170px"><label for="md-t">Técnico</label><select id="md-t" data-ofdia="tec">${T.map(x => `<option value="${x.id}" ${x.id === tid ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}<option value="_sem" ${tid === '_sem' ? 'selected' : ''}>Sem técnico atribuído</option></select></div>`;
+    return `<div class="pg">${roBanner()}<div class="of-row2" style="align-items:flex-end">${!eu || S.isAdmin ? sel : `<h2 style="margin:0;flex:1">${esc(eu.nome)}</h2>`}<div class="fld" style="margin:0;width:170px"><label for="md-d">Dia</label><input id="md-d" type="date" data-ofdia="data" value="${dia}"></div>${gm ? `<a class="btn" href="${gm}" target="_blank" rel="noopener">${ic('route', 16)}Rota de ${dia === TODAY() ? 'hoje' : fDY(dia)} no mapa (${pts.length})</a>` : ''}</div>
+      <div class="mini">${G.filter(g => g[0] !== 'Próximos dias').map(g => `<div><span>${g[0]}</span><b style="${g[0] === 'Atrasadas' && g[1].length ? 'color:var(--bad)' : ''}">${g[1].length}</b></div>`).join('')}</div>
+      ${L.length ? G.filter(g => g[1].length).map(g => `<div class="panel"><div class="ph"><h2>${g[0]}</h2><span class="note">${g[1].length}</span></div>${g[1].sort(ord).map(lin).join('')}</div>`).join('') : `<div class="panel empty"><b>Sem trabalho em aberto${t ? ' para ' + esc(t.nome) : ''}</b>As assistências e fichas atribuídas a este técnico aparecem aqui.</div>`}
+    </div>`;
   });
   ACT.ofiLoteStart = async d => {
     const p = S.data.planos.get(d.id); if (!p || !canAct()) return; if ((p.lotes || []).some(l => l.ini && !l.fim)) return toast('Já há um lote a contar. Pare-o primeiro.');

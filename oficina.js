@@ -284,7 +284,7 @@ window.OFI_INIT = function () {
         if (!vals.tipo || vals.tipo === 'oficina') vals.tipo = 'local';
       }
     }
-    const r = await save0(col, id, vals); if (r && col === 'fichas' && !id) setTimeout(() => go('ofi', { id: r }), 60); if (r && col === 'locais' && !id && S.ofLocalPara) { const fid = S.ofLocalPara; S.ofLocalPara = null; await save0('fichas', fid, { local: r }); } return r; };
+    const r = await save0(col, id, vals); if (r && col === 'fichas' && !id && !S.ofSemAbrir) setTimeout(() => go('ofi', { id: r }), 60); if (r && col === 'locais' && !id && S.ofLocalPara) { const fid = S.ofLocalPara; S.ofLocalPara = null; await save0('fichas', fid, { local: r }); } return r; };
 
   /* ---------- estilos ---------- */
   const st = document.createElement('style');
@@ -1184,10 +1184,21 @@ a.btn.pri{color:#fff}
     await patch('fichas', x.id, { aplicadaEm: f.id, estado: 'entregue', entregueEm: new Date().toISOString() });
     // a peça velha do cliente fica sempre na casa: nova ficha interna «por rever»
     const eid = await entInterna();
-    if (eid) await save('fichas', null, { tipo: 'interna', estado: 'recebido', entidade: eid, proprietario: (emp().nome || '') + ' · material da casa', equipamento: x.equipamento || f.equipamento, marca: x.marca || f.marca, modelo: x.modelo || f.modelo, grupo: x.grupo || f.grupo, avaria: `Peça velha retirada na ficha ${cod(f)} (${prop(f)})${f.avaria ? ' · ' + f.avaria : ''}`, origemFicha: f.id, entrada: new Date().toISOString() });
-    toast('Peça revista aplicada. A peça velha ficou com uma ficha interna «por rever».');
+    // por defeito igual à peça aplicada (equipamento, marca, modelo, grupo); o técnico só precisa do código para marcar a peça velha
+    S.ofSemAbrir = true;
+    const nid = eid ? await save('fichas', null, { tipo: 'interna', estado: 'recebido', entidade: eid, proprietario: (emp().nome || '') + ' · material da casa', equipamento: x.equipamento || f.equipamento, marca: x.marca || f.marca, modelo: x.modelo || f.modelo, grupo: x.grupo || f.grupo, avaria: `Peça velha retirada na ficha ${cod(f)} (${prop(f)})`, origemFicha: f.id, entrada: new Date().toISOString() }) : null;
+    S.ofSemAbrir = false;
     if (S.view === 'ofi' && S.params.id === x.id) go('ofi', { id: f.id });
+    const nv = nid && fx(nid);
+    if (!nv) { toast('Peça revista aplicada.'); return; }
+    const temCod = !!(nv.codigo || nv.numero);
+    openSheet(`<div class="sh"><h2>Peça aplicada</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb" style="text-align:center">
+      <p style="margin:0 0 4px">Escreva este código na <b>${esc(nomeEq(nv))}</b> que retirou do cliente:</p>
+      <div style="font-size:34px;font-weight:700;letter-spacing:1px;margin:14px 0;padding:14px;border:2px dashed var(--brand,var(--gold));border-radius:14px">${temCod ? esc(cod(nv)) : 'Sem rede'}</div>
+      <p class="note" style="margin:0 0 14px">${temCod ? `Fica em «Peças de troca» como <b>por rever</b>. A ficha ${esc(cod(f))} já tem a peça revista ${esc(cod(x))}.` : 'O código aparece quando a app voltar a ter rede (em «Peças de troca»).'}</p>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">${temCod ? `<button class="btn" data-act="ofiCodCopia" data-c="${esc(cod(nv))}">Copiar código</button><button class="btn" data-act="ofiLabel" data-id="${nv.id}">${ic('print', 16)}Imprimir etiqueta</button>` : ''}<button class="btn pri" data-act="close">OK</button></div></div>`);
   };
+  ACT.ofiCodCopia = d => { try { navigator.clipboard.writeText(d.c).then(() => toast('Código copiado'), () => toast(d.c)); } catch (_) { toast(d.c); } };
 
   ACT.ofiIntJunta = d => { const x = fx(d.id); if (!x) return; const L = D('fichas').filter(f => !interna(f) && f.tipo !== 'guarda' && !f.faturado && ABERTOS.includes(f.estado)).sort((a, b) => (b.entrada || '').localeCompare(a.entrada || '')).slice(0, 60);
     openSheet(`<div class="sh"><h2>Juntar ${esc(nomeEq(x))} a uma ficha</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb"><p class="note" style="margin:0 0 8px">Fichas de clientes em aberto, das mais recentes para as mais antigas.</p>${L.map(f => `<div class="row" role="button" tabindex="0" data-act="ofiTrocaOk" data-id="${f.id}" data-c="${x.id}"><span class="rt"><span class="r1">${esc(prop(f))}</span><span class="r2">${esc(cod(f))} · ${esc(TIPO_C[f.tipo] || '')} · ${esc(nomeEq(f))} · ${esc(estL(f))}${(f.trocas || []).length ? ' · já tem ' + f.trocas.length + ' peça(s) interna(s)' : ''}</span></span></div>`).join('') || '<div class="panel empty"><b>Não há fichas de clientes em aberto</b></div>'}</div>`); };

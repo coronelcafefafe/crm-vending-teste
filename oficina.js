@@ -123,6 +123,7 @@ window.OFI_INIT = function () {
   const difD = (a, b) => Math.round((new Date(b + 'T12:00') - new Date(a + 'T12:00')) / 864e5);
   function armCalc(f) {
     const c = cfg(); if (!temMod('armazenamento') || !c.armModo || c.armModo === 'nao' || !['oficina', 'guarda'].includes(f.tipo) || f.estado === 'cancelado') return null;
+    if (f.equipamento !== 'Máquina completa') return null; // só as máquinas completas pagam armazenamento
     const base = (f.tipo === 'guarda' ? f.entrada : f.prontoEm || '').slice(0, 10); if (!base) return null;
     const gratisAte = addD(base, +(c.armGratis ?? 0) || 0), desde = c.armInicio && c.armInicio > gratisAte ? c.armInicio : gratisAte, ate = (f.entregueEm || '').slice(0, 10) || TODAY();
     const dias = Math.max(0, difD(desde, ate)), un = c.armModo === 'mes' ? Math.ceil(dias / 30) : dias, maq = f.equipamento === 'Máquina completa';
@@ -588,8 +589,8 @@ a.btn.pri{color:#fff}
         <div class="fld"><label for="cf-ai">A partir de</label><input id="cf-ai" type="date" value="${esc(c.armInicio || '')}"></div>
         <div class="fld"><label for="cf-ag">Dias grátis</label><input id="cf-ag" type="number" step="1" value="${c.armGratis ?? 8}"></div>
         <div class="fld"><label for="cf-aav">Avisar o cliente (dias antes)</label><input id="cf-aav" type="number" step="1" value="${c.armAvisoDias ?? 3}"></div>
-        <div class="fld"><label for="cf-apm">Preço máquina completa (€ s/ IVA)</label><input id="cf-apm" type="number" step="0.01" value="${c.armPrecoMaq ?? ''}"></div>
-        <div class="fld"><label for="cf-app">Preço peça (€ s/ IVA)</label><input id="cf-app" type="number" step="0.01" value="${c.armPrecoPeca ?? ''}"></div>
+        <div class="fld"><label for="cf-apm">Preço por máquina (€ s/ IVA)</label><input id="cf-apm" type="number" step="0.01" value="${c.armPrecoMaq ?? ''}"></div>
+        <div class="fld" style="display:none"><label for="cf-app">Preço peça (€ s/ IVA)</label><input id="cf-app" type="number" step="0.01" value="${c.armPrecoPeca ?? ''}"></div>
         <div class="fld"><label for="cf-lat">Morada da empresa · latitude</label><input id="cf-lat" type="number" step="any" value="${c.baseLat ?? ''}"></div>
         <div class="fld"><label for="cf-lng">longitude</label><input id="cf-lng" type="number" step="any" value="${c.baseLng ?? ''}"></div></div>
         <label class="tog"><input id="cf-iv" type="checkbox" ${c.idaVolta ? 'checked' : ''}><span>Nos clientes por km, cobrar ida e volta</span></label>
@@ -684,16 +685,29 @@ a.btn.pri{color:#fff}
   ACT.fuFatItemOk = async d => { const f = fx(d.id), r = f && armCalc(f); if (!r || !S.canWrite || !S.verValores) return; const em = new Date().toISOString(), por = S.me?.name || S.me?.email || '';
     let FT = [...(f.armFaturado || [])], ym = r.desde.slice(0, 7); const fim = TODAY().slice(0, 7);
     while (ym <= fim) { const m = armMes(Object.assign({}, f, { armFaturado: FT }), ym); if (m && m.pendUn) FT = [...FT.filter(x => x.mes !== ym), { mes: ym, dias: m.dias, un: m.un, preco: r.preco, valor: m.un * r.preco, em, por }]; ym = ymAdd(ym, 1); }
-    closeSheet(); if (await patch('fichas', f.id, { armFaturado: FT })) toast('Marcado como faturado'); };
+    if (!d.silencio) closeSheet(); if (await patch('fichas', f.id, { armFaturado: FT }) && !d.silencio) toast('Marcado como faturado'); };
   const vFul = () => loadingOr(() => {
-    const c = cfg(), CH = temMod('armazenamento') ? ['Em armazém', 'Faturar mês'] : ['Em armazém'], ch = CH.includes(S.f.fulfil) ? S.f.fulfil : CH[0], q = norm(S.q.fulfil || ''), V = S.verValores;
+    const c = cfg(), CH = temMod('armazenamento') ? ['Em armazém', 'Máquinas +15 d', 'Máquinas +30 d', 'Faturar mês'] : ['Em armazém', 'Máquinas +15 d', 'Máquinas +30 d'], ch = CH.includes(S.f.fulfil) ? S.f.fulfil : CH[0], q = norm(S.q.fulfil || ''), V = S.verValores;
     const ym = S.fuMes || TODAY().slice(0, 7), emCurso = ym === TODAY().slice(0, 7), ab = k => !!q || (S.fuAb || new Set()).has(k);
     const procura = f => !q || norm(entName(f.entidade) + ' ' + nomeEq(f) + ' ' + cod(f) + ' ' + (f.nSerie || '')).includes(q);
     const grupos = L => { const m = new Map(); L.forEach(f => { if (!m.has(f.entidade)) m.set(f.entidade, []); m.get(f.entidade).push(f); }); return [...m.entries()].map(([id, L]) => ({ id, nome: entName(id), L: L.sort((a, b) => (a.entrada || '').localeCompare(b.entrada || '')) })).sort((a, b) => b.L.length - a.L.length || a.nome.localeCompare(b.nome, 'pt')); };
     const regra = c.armModo && c.armModo !== 'nao' ? `Conta ${c.armModo === 'mes' ? 'ao mês' : 'ao dia'} depois de ${c.armGratis ?? 0} dias grátis (desde a entrada nas máquinas em guarda, desde «pronto» nas reparações por levantar)${c.armInicio ? `, nunca antes de ${fDY(c.armInicio)}` : ''}.` : 'A taxa de armazenamento está desligada em Preços e deslocações.';
     const cab = (k, nome, extra, dir) => `<div class="ph" role="button" tabindex="0" data-act="fuTog" data-k="${esc(k)}" style="cursor:pointer;gap:10px" aria-expanded="${ab(k)}"><h2 style="flex:1;min-width:0">${esc(nome)} ${extra}</h2>${dir}${ic(ab(k) ? 'up' : 'down', 20)}</div>`;
     let corpo = '', mini = '';
-    if (ch === 'Em armazém') {
+    if (ch.startsWith('Máquinas +')) {
+      // máquinas há mais de N dias cá (em guarda, prontas ou à espera de decisão), por cliente, para escolher e faturar
+      const N = ch.includes('30') ? 30 : 15, sel = S.fuSel || (S.fuSel = new Set()), ca = f => difD((f.entrada || TODAY()).slice(0, 10), TODAY());
+      const M = D('fichas').filter(f => naCasa(f) && f.equipamento === 'Máquina completa' && (f.tipo === 'guarda' || f.estado === 'pronto' || f.estado === 'orcamento') && ca(f) > N), G = grupos(M.filter(procura));
+      const podeFat = S.canWrite && V && temMod('armazenamento'), fat = f => { const r = armCalc(f); return r && r.aContar && r.pendUn > 0 ? r : null; };
+      [...sel].forEach(id => { if (!M.some(f => f.id === id)) sel.delete(id); });
+      const SL = M.filter(f => sel.has(f.id) && fat(f)), tot = SL.reduce((s, f) => s + fat(f).pendValor, 0);
+      mini = `<div><span>Clientes</span><b>${new Set(M.map(f => f.entidade)).size}</b></div><div><span>Máquinas há +${N} dias</span><b>${M.length}</b></div><div><span>Com dias a faturar</span><b>${M.filter(fat).length}</b></div>${V ? `<div><span>Selecionado</span><b>${eur(tot)}</b></div>` : ''}`;
+      const lin = f => { const r = armCalc(f), d = ca(f), pode = podeFat && fat(f);
+        return `<div class="row"><label style="display:flex;align-items:center;padding-right:4px;${pode ? 'cursor:pointer' : 'opacity:.4'}"><input type="checkbox" data-fusel="${f.id}" ${sel.has(f.id) && pode ? 'checked' : ''} ${pode ? '' : 'disabled'} style="width:20px;height:20px;margin:0"></label><span class="rt" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="r1">${esc(nomeEq(f))}</span><span class="r2">${esc([cod(f), f.nSerie ? 'S/N ' + f.nSerie : '', f.tipo === 'guarda' ? 'em guarda' : f.estado === 'pronto' ? 'pronta por levantar' : 'à espera de decisão', 'entrou ' + fDY(f.entrada)].filter(Boolean).join(' · '))}</span></span><span class="rr"><span class="note" style="${d > 30 ? 'color:var(--bad);font-weight:500' : ''}">${d} dias cá</span>${!r ? '' : r.aContar ? `<span class="note" style="color:#B45309;font-weight:500">${r.pendUn} ${r.pendL} a faturar${V && !r.semPreco ? ' · ' + eur(r.pendValor) : ''}</span>` : `<span class="note">grátis até ${fDY(addD(r.desde, -1))}</span>`}</span></div>`; };
+      corpo = (podeFat ? `<div class="panel"><div class="pb" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="note" style="flex:1">${SL.length ? `${SL.length} ${SL.length === 1 ? 'máquina selecionada' : 'máquinas selecionadas'}${V ? ' · <b>' + eur(tot) + '</b> + IVA' : ''}` : 'Escolha as máquinas a faturar, ou marque o cliente para faturar todas as dele.'}</span><button class="btn pri" data-act="fuFatSel" ${SL.length ? '' : 'disabled'}>Faturar selecionadas</button></div></div>` : '') +
+        (G.length ? G.map(g => { const P0 = g.L.filter(f => podeFat && fat(f)), todas = P0.length && P0.every(f => sel.has(f.id));
+          return `<div class="panel"><div class="ph" style="gap:10px"><label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;${P0.length ? 'cursor:pointer' : ''}"><input type="checkbox" data-fusc="${g.id}" ${todas ? 'checked' : ''} ${P0.length ? '' : 'disabled'} style="width:20px;height:20px;margin:0" title="Faturar tudo deste cliente"><h2 style="margin:0">${esc(g.nome)} <span class="note" style="font-weight:500">· ${g.L.length} ${g.L.length === 1 ? 'máquina' : 'máquinas'}</span></h2></label>${V && P0.length ? `<span class="note">${eur(P0.reduce((s, f) => s + fat(f).pendValor, 0))}</span>` : ''}</div>${g.L.map(lin).join('')}</div>`; }).join('') : `<div class="panel empty"><b>Nenhuma máquina de cliente está cá há mais de ${N} dias</b></div>`);
+    } else if (ch === 'Em armazém') {
       // tudo o que o cliente tem cá: para arranjar (máquinas | peças) e a aguardar (máquinas | peças), com os dias de armazém
       const A = D('fichas').filter(naCasa), G = grupos(A.filter(procura)), R = A.map(armCalc).filter(Boolean);
       const maq = f => f.equipamento === 'Máquina completa', aguarda = f => f.tipo === 'guarda' || f.estado === 'pronto' || f.estado === 'orcamento';
@@ -722,6 +736,14 @@ a.btn.pri{color:#fff}
     </div>`;
   });
   VIEWS.fulfil = vFul; VIEWS.ativos = vFul;
+  document.addEventListener('change', e => { const t = e.target, ds = t?.dataset || {}; if (!ds.fusel && !ds.fusc) return; const sel = S.fuSel || (S.fuSel = new Set());
+    if (ds.fusel) t.checked ? sel.add(ds.fusel) : sel.delete(ds.fusel);
+    if (ds.fusc) document.querySelectorAll('input[data-fusel]').forEach(i => { const f = fx(i.dataset.fusel); if (f && f.entidade === ds.fusc && !i.disabled) t.checked ? sel.add(f.id) : sel.delete(f.id); });
+    render(); });
+  ACT.fuFatSel = async () => { const ids = [...(S.fuSel || [])].filter(id => { const r = fx(id) && armCalc(fx(id)); return r && r.pendUn > 0; }); if (!ids.length || !S.canWrite || !S.verValores) return;
+    const tot = ids.reduce((s, id) => s + armCalc(fx(id)).pendValor, 0);
+    openSheet(`<div class="sh"><h2>Faturar armazenamento</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb"><p style="margin:0 0 8px">${ids.length} ${ids.length === 1 ? 'máquina' : 'máquinas'} · <b>${eur(tot)}</b> + IVA</p>${ids.map(id => { const f = fx(id), r = armCalc(f); return `<div class="note">${esc(entName(f.entidade))} · ${esc(cod(f))} · ${r.pendUn} ${r.pendL} · ${eur(r.pendValor)}</div>`; }).join('')}<p class="note" style="margin:10px 0 0">Os dias ficam marcados como faturados até hoje. Os seguintes continuam a contar.</p></div><div class="sf"><span class="grow"></span><button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="fuFatSelOk">Marcar como faturado</button></div>`); };
+  ACT.fuFatSelOk = async () => { const ids = [...(S.fuSel || [])]; closeSheet(); let n = 0; for (const id of ids) { const r = fx(id) && armCalc(fx(id)); if (r && r.pendUn > 0) { await ACT.fuFatItemOk({ id, silencio: true }); n++; } } S.fuSel = new Set(); toast(n === 1 ? '1 máquina faturada' : n + ' máquinas faturadas'); render(); };
   ACT.fuTog = d => { S.fuAb = S.fuAb || new Set(); S.fuAb.has(d.k) ? S.fuAb.delete(d.k) : S.fuAb.add(d.k); render(); };
   ACT.fuMes = d => { const a = TODAY().slice(0, 7), n = ymAdd(S.fuMes || a, +d.n); S.fuMes = n > a ? a : n; render(); };
   ACT.fuFat = async d => {

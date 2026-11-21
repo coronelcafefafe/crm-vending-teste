@@ -9,7 +9,7 @@ window.OFI_INIT = function () {
 
   const EST = { recebido: 'Recebido', diagnostico: 'Em diagnóstico', orcamento: 'Orçamento enviado', aguarda_peca: 'À espera de peça', reparacao: 'Em reparação', pronto: 'Pronto a levantar', entregue: 'Entregue ao cliente', cancelado: 'Cancelado' };
   const EST_T = { recebido: 'info', diagnostico: 'warn', orcamento: 'gold', aguarda_peca: 'bad', reparacao: 'warn', pronto: 'ok', entregue: 'mute', cancelado: 'mute' };
-  const TIPO = { oficina: 'Oficina (entrou cá)', guarda: 'Guarda (só armazenamento)', local: 'Assistência no cliente', manutencao: 'Manutenção', transporte: 'Transporte / troca de máquina', interna: 'Revisão interna (material da casa)' };
+  const TIPO = { oficina: 'Oficina (entrou cá)', guarda: 'Guarda (só armazenamento)', local: 'Assistência no cliente', transporte: 'Transporte / troca de máquina', interna: 'Revisão interna (material da casa)' };
   const TIPO_C = { oficina: 'Oficina', guarda: 'Guarda', local: 'No cliente', manutencao: 'Manutenção', reparacao: 'Reparação', transporte: 'Transporte', interna: 'Interna' };
   const EQUIP = ['Máquina completa', 'Caldeira', 'Grupo café Z2000', 'Grupo café Z3000', 'Moinho doseador', 'Módulo copos', 'Placa eletrónica', 'Moedeiro / sistema de pagamento', 'Bomba', 'Misturador', 'Distribuidor de copos'];
   // nas fichas só se põe a peça pelo código; os croquis e a procura ficam guardados para ligar mais tarde

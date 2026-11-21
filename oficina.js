@@ -174,9 +174,10 @@ window.OFI_INIT = function () {
   NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['oficina', 'Oficina e assistências', 'tool'], ['ativos', 'Ativos dos clientes', 'box'], ['trocas', 'Peças de troca (revisões)', 'swap'], ['equip', 'Histórico máquinas', 'serial']);
   const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['encomendarp', 'Peças a encomendar', 'box'], ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro'], ['modulos', 'Funcionalidades', 'grid'], ['marca', 'Empresa e marca', 'edit']);
   for (let i = NAV.length - 1; i > 0; i--) if (NAV[i][0] === 'sep' && (NAV[i - 1][0] === 'sep' || i === NAV.length - 1)) NAV.splice(i, 1);
-  SO_VALORES.push('ofcfg', 'tecnicosof');
+  SO_VALORES.push('ofcfg', 'tecnicosof', 'faturacao');
+  { const iC = NAV.findIndex(n => n[0] === 'clientes'); NAV.splice(iC + 1, 0, ['faturacao', 'Faturação', 'euro']); }
   TABS.splice(0, TABS.length, ['inicio', 'Início', 'home'], ['meudia', 'O meu dia', 'clock'], ['oficina', 'Oficina', 'tool'], ['clientes', 'Clientes', 'users'], ['mais', 'Mais', 'menu']);
-  Object.assign(TITLES, { trocas: 'Peças de troca', marca: 'Empresa e marca', empresas: 'Empresas', modulos: 'Funcionalidades', fulfil: 'Ativos dos clientes', equip: 'Histórico máquinas', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
+  Object.assign(TITLES, { trocas: 'Peças de troca', marca: 'Empresa e marca', empresas: 'Empresas', modulos: 'Funcionalidades', fulfil: 'Ativos dos clientes', faturacao: 'Faturação', equip: 'Histórico máquinas', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
   Object.defineProperty(TITLES, 'ofi', { get() { const f = S.data.fichas.get(S.params?.id); return f ? 'Ficha ' + cod(f) : 'Ficha'; } });
   const nc0 = navCounts; navCounts = () => ({ ...nc0(), oficina: D('fichas').filter(f => f.tipo !== 'guarda' && ABERTOS.includes(f.estado)).length });
 
@@ -736,6 +737,32 @@ a.btn.pri{color:#fff}
     </div>`;
   });
   VIEWS.fulfil = vFul; VIEWS.ativos = vFul;
+  /* ---------- Faturação: tudo o que falta faturar, por cliente ---------- */
+  const fatPend = () => { const m = new Map(), add = (id, k, x) => { if (!m.has(id)) m.set(id, { id, nome: entName(id), F: [], A: [] }); m.get(id)[k].push(x); };
+    porFaturar().forEach(f => add(f.entidade, 'F', { f, v: valores(f).total }));
+    D('fichas').filter(f => naCasa(f) && !['pronto', 'entregue'].includes(f.estado)).forEach(f => { const r = armCalc(f); if (r && r.aContar && r.pendUn > 0) add(f.entidade, 'A', { f, r }); });
+    return [...m.values()].map(c => ({ ...c, tot: c.F.reduce((s, x) => s + x.v, 0) + c.A.reduce((s, x) => s + x.r.pendValor, 0) })).sort((a, b) => b.tot - a.tot || a.nome.localeCompare(b.nome, 'pt')); };
+  VIEWS.faturacao = () => loadingOr(() => {
+    if (!S.verValores) return '<div class="pg"><div class="panel empty"><b>Só quem vê valores</b></div></div>';
+    const q = norm(S.q.faturacao || ''), C = fatPend().filter(c => !q || norm(c.nome).includes(q)), ab = k => !!q || (S.fatAb || new Set()).has(k), pode = S.canWrite;
+    const linF = ({ f, v }) => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero ?? '•'}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}</span><span class="r2">${esc([cod(f), TIPO_C[f.tipo], f.estado === 'entregue' ? 'entregue ' + fDY(f.entregueEm) : 'pronta ' + fDY(f.prontoEm)].filter(Boolean).join(' · '))}${(f.visitas || []).some(x => !x.culpa) ? ' · <b style="color:var(--bad)">falta decidir a responsabilidade de uma visita</b>' : ''}</span></span><span class="rr"><b class="num">${eur(v)}</b></span></div>`;
+    const linA = ({ f, r }) => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero ?? '•'}</span><span class="rt"><span class="r1">Armazenamento · ${esc(nomeEq(f))}</span><span class="r2">${esc([cod(f), f.nSerie ? 'S/N ' + f.nSerie : '', 'ainda cá', r.pendUn + ' ' + r.pendL + ' × ' + eur(r.preco)].filter(Boolean).join(' · '))}</span></span><span class="rr"><b class="num">${eur(r.pendValor)}</b></span></div>`;
+    const T = C.reduce((s, c) => s + c.tot, 0);
+    return `<div class="pg">${roBanner()}
+      <div class="mini"><div><span>Clientes por faturar</span><b>${C.length}</b></div><div><span>Fichas</span><b>${C.reduce((s, c) => s + c.F.length, 0)}</b></div><div><span>Armazenamento</span><b>${C.reduce((s, c) => s + c.A.length, 0)}</b></div><div><span>Total s/ IVA</span><b>${eur(T)}</b></div></div>
+      <div class="tb"><div class="tbr"><label class="srch">${ic('search', 18)}<input id="q-faturacao" data-q="faturacao" type="search" placeholder="Procurar cliente" value="${esc(S.q.faturacao || '')}" autocomplete="off"></label></div></div>
+      ${C.length ? C.map(c => `<div class="panel"><div class="ph" role="button" tabindex="0" data-act="fatTog" data-k="${c.id}" style="cursor:pointer;gap:10px" aria-expanded="${ab(c.id)}"><h2 style="flex:1;min-width:0">${esc(c.nome)} <span class="note" style="font-weight:500">· ${[c.F.length && c.F.length + (c.F.length === 1 ? ' ficha' : ' fichas'), c.A.length && c.A.length + ' armazen.'].filter(Boolean).join(' · ')}</span></h2><b class="num">${eur(c.tot)}</b>${ic(ab(c.id) ? 'up' : 'down', 20)}</div>${!ab(c.id) ? '' : `${c.F.length ? `<div class="of-fusep"><span>Fichas fechadas · ${c.F.length}</span></div>` + c.F.map(linF).join('') : ''}${c.A.length ? `<div class="of-fusep"><span>Armazenamento de máquinas ainda cá · ${c.A.length}</span></div>` + c.A.map(linA).join('') : ''}<div class="pb" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${temMod('sage') && c.F.length ? `<button class="btn" data-act="fatExp" data-id="${c.id}">${ic('dl', 16)}Excel para o Sage</button>` : ''}${pode ? `<button class="btn pri" data-act="fatTudo" data-id="${c.id}">Faturar tudo deste cliente</button>` : ''}</div>`}</div>`).join('') : '<div class="panel empty"><b>Não há nada por faturar</b>Quando uma ficha fica pronta ou entregue, ou uma máquina passa os dias grátis de armazenamento, aparece aqui.</div>'}
+    </div>`;
+  });
+  ACT.fatTog = d => { S.fatAb = S.fatAb || new Set(); S.fatAb.has(d.k) ? S.fatAb.delete(d.k) : S.fatAb.add(d.k); render(); };
+  ACT.fatExp = d => { const t = document.createElement('select'); t.id = 'offcli'; t.hidden = true; t.innerHTML = `<option value="${esc(d.id)}" selected></option>`; document.body.append(t); try { ACT.ofiExport(); } finally { t.remove(); } };
+  ACT.fatTudo = d => { const c = fatPend().find(x => x.id === d.id); if (!c) return;
+    if (c.F.some(x => (x.f.visitas || []).some(v => !v.culpa))) return ACT.ofiCulpaLista({ ids: c.F.filter(x => (x.f.visitas || []).some(v => !v.culpa)).map(x => x.f.id).join(',') });
+    openSheet(`<div class="sh"><h2>Faturar ${esc(c.nome)}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb"><p style="margin:0 0 8px">Total <b>${eur(c.tot)}</b> + IVA</p>${c.F.map(x => `<div class="note">${esc(cod(x.f))} · ${esc(nomeEq(x.f))} · ${eur(x.v)}</div>`).join('')}${c.A.map(x => `<div class="note">Armazenamento ${esc(cod(x.f))} · ${x.r.pendUn} ${x.r.pendL} · ${eur(x.r.pendValor)}</div>`).join('')}<p class="note" style="margin:10px 0 0">Faça a fatura no Sage com estas referências e depois marque aqui. As fichas ficam «faturadas» e os dias de armazenamento ficam faturados até hoje.</p></div><div class="sf"><span class="grow"></span><button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="fatTudoOk" data-id="${c.id}">Marcar como faturado</button></div>`); };
+  ACT.fatTudoOk = async d => { const c = fatPend().find(x => x.id === d.id); if (!c || !S.canWrite) return; closeSheet(); const em = new Date().toISOString();
+    for (const x of c.F) await patch('fichas', x.f.id, { faturado: true, faturadoEm: em });
+    for (const x of c.A) await ACT.fuFatItemOk({ id: x.f.id, silencio: true });
+    toast('Cliente faturado'); render(); };
   document.addEventListener('change', e => { const t = e.target, ds = t?.dataset || {}; if (!ds.fusel && !ds.fusc) return; const sel = S.fuSel || (S.fuSel = new Set());
     if (ds.fusel) t.checked ? sel.add(ds.fusel) : sel.delete(ds.fusel);
     if (ds.fusc) document.querySelectorAll('input[data-fusel]').forEach(i => { const f = fx(i.dataset.fusel); if (f && f.entidade === ds.fusc && !i.disabled) t.checked ? sel.add(f.id) : sel.delete(f.id); });

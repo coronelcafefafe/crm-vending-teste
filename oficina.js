@@ -9,7 +9,7 @@ window.OFI_INIT = function () {
 
   const EST = { recebido: 'Recebido', diagnostico: 'Em diagnóstico', orcamento: 'Orçamento enviado', aguarda_peca: 'À espera de peça', reparacao: 'Em reparação', pronto: 'Pronto a levantar', entregue: 'Entregue ao cliente', cancelado: 'Cancelado' };
   const EST_T = { recebido: 'info', diagnostico: 'warn', orcamento: 'gold', aguarda_peca: 'bad', reparacao: 'warn', pronto: 'ok', entregue: 'mute', cancelado: 'mute' };
-  const TIPO = { oficina: 'Oficina (entrou cá)', guarda: 'Guarda (só armazenamento)', local: 'Assistência no cliente', manutencao: 'Manutenção', reparacao: 'Reparação no cliente', transporte: 'Transporte / troca de máquina', interna: 'Revisão interna (material da casa)' };
+  const TIPO = { oficina: 'Oficina (entrou cá)', guarda: 'Guarda (só armazenamento)', local: 'Assistência no cliente', manutencao: 'Manutenção', transporte: 'Transporte / troca de máquina', interna: 'Revisão interna (material da casa)' };
   const TIPO_C = { oficina: 'Oficina', guarda: 'Guarda', local: 'No cliente', manutencao: 'Manutenção', reparacao: 'Reparação', transporte: 'Transporte', interna: 'Interna' };
   const EQUIP = ['Máquina completa', 'Caldeira', 'Grupo café Z2000', 'Grupo café Z3000', 'Moinho doseador', 'Módulo copos', 'Placa eletrónica', 'Moedeiro / sistema de pagamento', 'Bomba', 'Misturador', 'Distribuidor de copos'];
   // nas fichas só se põe a peça pelo código; os croquis e a procura ficam guardados para ligar mais tarde
@@ -250,11 +250,18 @@ window.OFI_INIT = function () {
     const pv = document.querySelector('label[for="f-prevista"]');
     const INTF = ['entidade-q', 'proprietario', 'prevista', 'precoHora'];
     const es = document.getElementById('f-estado');
-    const tg = () => { const fora = FORA_T.includes(sel.value), intr = sel.value === 'interna';
+    // numa assistência no cliente só se escolhe entre assistência e transporte
+    if (FORA_T.includes(sel.value)) { const cur = sel.value, O = { local: TIPO.local, transporte: TIPO.transporte }; if (!O[cur]) O[cur] = TIPO_C[cur] || cur; sel.innerHTML = Object.entries(O).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join(''); sel.value = cur; }
+    else [...sel.options].forEach(o => { if (['manutencao', 'reparacao'].includes(o.value) && o.value !== sel.value) o.remove(); });
+    const eq0 = document.getElementById('f-entidade-q'), eqL = eq0 && document.querySelector('label[for="f-entidade-q"]');
+    if (eqL && !document.getElementById('of-sede')) { const fx0 = ex || {}; eqL.insertAdjacentHTML('beforeend', ` <span class="of-sede" role="checkbox" style="float:right;font-weight:400;display:inline-flex;align-items:center;gap:5px;cursor:pointer" onclick="event.preventDefault();event.stopPropagation();const c=this.querySelector('input');c.checked=!c.checked;c.dispatchEvent(new Event('change'))"><input type="checkbox" id="of-sede" tabindex="-1" ${ex && !fx0.local ? 'checked' : ''} style="width:15px;height:15px;margin:0;pointer-events:none">na sede do cliente</span>`); }
+    const sede = document.getElementById('of-sede');
+    const tg = () => { const fora = FORA_T.includes(sel.value), intr = sel.value === 'interna', naSede = !!sede?.checked;
+      const sl = sede?.closest('.of-sede'); if (sl) sl.style.display = fora ? 'inline-flex' : 'none';
       if (es) { const M = estDe(sel.value), cur = es.value; es.innerHTML = Object.entries(M).filter(([k]) => k !== '_voltar').map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join(''); es.value = M[cur] ? cur : (cur === 'entregue' && M.pronto ? 'pronto' : 'recebido'); }
       INTF.filter(k => k !== 'precoHora').forEach(k => { const el = document.getElementById('f-' + k)?.closest('.fld'); if (el) el.style.display = intr ? 'none' : ''; });
       if (intr) entInterna().then(eid => { const h = document.getElementById('f-entidade'), q = document.getElementById('f-entidade-q'); if (eid && h) { h.value = eid; if (q) q.value = S.data.entidades.get(eid)?.nome || ''; } });
-      LOCF.forEach(k => { const el = document.getElementById('f-' + k)?.closest('.fld'); if (el) el.style.display = fora ? '' : 'none'; });
+      LOCF.forEach(k => { const el = document.getElementById('f-' + k)?.closest('.fld'); if (el) el.style.display = fora && !naSede ? '' : 'none'; if (naSede) { const i = document.getElementById('f-' + k); if (i) i.value = ''; } });
       const r2 = rc?.closest('.fld'); if (r2) r2.style.display = fora ? 'none' : '';
       // assistências no cliente: é sempre a máquina completa; só marca, modelo, n.º de série, local e avaria
       ['equipamento', 'grupo', 'proprietario'].forEach(k => { const el = document.getElementById('f-' + k)?.closest('.fld'); if (el && !intr) el.style.display = fora ? 'none' : ''; });
@@ -263,6 +270,7 @@ window.OFI_INIT = function () {
       const ml = document.querySelector('label[for="f-modelo"]'); if (ml) ml.textContent = fora ? 'Modelo da máquina (para os manuais)' : 'Modelo da máquina';
       if (pv) pv.textContent = fora ? 'Data marcada com o cliente' : 'Data acordada com o cliente (entrega)'; };
     const ph = document.getElementById('f-precoHora')?.closest('.fld'); if (ph) ph.style.display = 'none';
+    sede?.addEventListener('change', tg);
     sel.addEventListener('change', tg); tg();
   }
   openForm = (col, id, preset) => { const r = of0(col, id, preset); if (col === 'fichas') { try { ajustaFormFicha(id); } catch (_) { }  const mo = document.getElementById('f-modelo'); if (mo && !document.getElementById('of-moL')) { mo.setAttribute('list', 'of-moL'); mo.setAttribute('autocomplete', 'off'); mo.insertAdjacentHTML('afterend', `<datalist id="of-moL">${modelosL().map(x => `<option value="${esc(x)}">`).join('')}</datalist>`); }  const i = document.getElementById('f-equipamento'); if (i && !document.getElementById('of-eqL')) { i.setAttribute('list', 'of-eqL'); i.setAttribute('autocomplete', 'off'); i.insertAdjacentHTML('afterend', `<datalist id="of-eqL">${[...new Set([...EQUIP, ...D('fichas').map(f => f.equipamento).filter(Boolean)])].map(x => `<option value="${esc(x)}">`).join('')}</datalist>`); } } return r; };

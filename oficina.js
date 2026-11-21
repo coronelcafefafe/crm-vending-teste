@@ -292,6 +292,11 @@ window.OFI_INIT = function () {
   st.textContent = `
 .of-est{display:flex;flex-wrap:wrap;gap:6px}
 .of-seg{display:flex;flex-wrap:wrap;gap:6px}
+.of-estb{display:inline-flex;align-items:center;gap:6px}
+.of-estm{position:absolute;right:0;top:calc(100% + 6px);z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 28px rgba(0,0,0,.14);min-width:210px;padding:5px;display:flex;flex-direction:column}
+.of-estm button{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;background:none;border:0;border-radius:8px;padding:9px 11px;font:inherit;font-size:14px;color:inherit;cursor:pointer}
+.of-estm button:hover{background:var(--line)}
+.of-estm button.on{font-weight:600;color:var(--brand,var(--gold))}
 .of-seg label.chipb{position:relative;cursor:pointer;display:inline-flex;align-items:center;gap:6px;user-select:none}
 .of-seg label.chipb input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
 .of-seg label.chipb::before{content:"";width:14px;height:14px;border-radius:50%;border:2px solid currentColor;opacity:.55;flex:none}
@@ -443,7 +448,7 @@ a.btn.pri{color:#fff}
     <div class="panel"><div class="pb" style="padding-top:12px"><div class="kv">${[['Equipamento', nomeEq(f)], ['N.º de série', f.nSerie], ['Grupo', f.grupo], ['Avaria / pedido', f.avaria], ['Técnico', f.tecnico ? tecNome(f.tecnico) : (f.resp ? nameOf(f.resp) : '')], ['Notas', f.notas]].filter(x => x[1]).map(([l, x]) => `<div class="kvi"><span>${l}</span><b style="white-space:pre-wrap">${esc(x)}</b></div>`).join('')}</div></div></div>
     <div class="acts"><a class="act ${tel ? '' : 'off'}" href="tel:${esc(telClean(tel))}">${ic('phone')}<span>Ligar</span></a><a class="act ${e.telemovel ? '' : 'off'}" href="https://wa.me/${esc(waNum(e.telemovel))}" target="_blank" rel="noopener">${ic('wa')}<span>WhatsApp</span></a><a class="act ${e.email ? '' : 'off'}" href="mailto:${esc(e.email || '')}">${ic('mail')}<span>Email</span></a><a class="act ${dest ? '' : 'off'}" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}" target="_blank" rel="noopener">${ic('pin')}<span>Ir até lá</span></a></div>
     ${ro ? (f.modelo ? `<div class="of-row2"><button class="btn" data-act="ofiManuais" data-c="${esc(f.modelo)}">${ic('book', 16)}Manuais</button></div>` : '') : `<div class="of-row2"><button class="btn" data-act="ofiLabel" data-id="${f.id}">${ic('qr', 16)}Imprimir etiqueta</button>${f.tipo === 'oficina' ? `<button class="btn" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrada">${ic('doc', 16)}Comprovativo de entrada</button>` : ''}<button class="btn ${['pronto', 'entregue'].includes(f.estado) ? 'pri' : ''}" data-act="ofiDocMenu" data-id="${f.id}" data-c="entrega">${ic('sign', 16)}${f.tipo === 'oficina' ? 'Guia de entrega' : 'Folha de serviço'}</button><button class="btn" data-act="ofiAviso" data-id="${f.id}">${ic('send', 16)}${fora(f) ? 'Enviar relatório ao cliente' : 'Avisar cliente'}</button>${temMod('link') ? `<button class="btn" data-act="ofiLink" data-id="${f.id}">${ic('link', 16)}Link do cliente</button>` : ''}${f.modelo ? `<button class="btn" data-act="ofiManuais" data-c="${esc(f.modelo)}">${ic('book', 16)}Manuais${(() => { const n = D('manuais').filter(m => norm(m.modelo) === norm(f.modelo)).length; return n ? ` (${n})` : ''; })()}</button>` : ''}<button class="btn" data-act="ofiPdfUm" data-id="${f.id}">${ic('pdf', 16)}PDF da ficha</button><button class="btn" data-act="ofiEdit" data-id="${f.id}">${ic('edit', 16)}Editar ficha</button></div>`}
-    <div class="panel"><div class="ph"><h2>Estado</h2>${f.avisadoEm ? `<span class="note">Cliente avisado ${fD(f.avisadoEm)}</span>` : ''}</div><div class="pb"><div class="of-est">${Object.entries(estDe(f.tipo)).map(([k, l]) => k === '_voltar' ? (ro || fechada(f) ? '' : `<button class="chipb" data-act="ofiVoltar" data-id="${f.id}">${l}</button>`) : `<button class="chipb ${f.estado === k || (k === 'pronto' && f.estado === 'entregue' && estDe(f.tipo) !== EST) ? 'on' : ''}" data-act="ofiEst" data-id="${f.id}" data-c="${k}" ${ro ? 'disabled' : ''}>${l}</button>`).join('')}</div></div></div>`;
+    <div class="panel" style="overflow:visible"><div class="pb" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b style="font-size:16px">Estado</b>${f.avisadoEm ? `<span class="note">Cliente avisado ${fD(f.avisadoEm)}</span>` : ''}<span style="flex:1"></span><div style="position:relative"><button class="btn sm of-estb" data-act="ofiEstAb" data-id="${f.id}" ${ro ? 'disabled' : ''} aria-expanded="${S.ofEstAb === f.id}">${badge(estL(f), EST_T[f.estado])}${ro ? '' : ic(S.ofEstAb === f.id ? 'up' : 'down', 16)}</button>${S.ofEstAb === f.id && !ro ? `<div class="of-estm" role="menu">${Object.entries(estDe(f.tipo)).map(([k, l]) => { const on = f.estado === k || (k === 'pronto' && f.estado === 'entregue' && estDe(f.tipo) !== EST); return k === '_voltar' ? (fechada(f) ? '' : `<button role="menuitem" data-act="ofiVoltar" data-id="${f.id}">${l}</button>`) : `<button role="menuitem" class="${on ? 'on' : ''}" data-act="ofiEstEsc" data-id="${f.id}" data-c="${k}">${l}${on ? ic('check', 16) : ''}</button>`; }).join('')}</div>` : ''}</div></div></div>`;
 
     // local da assistência (cliente do cliente)
     if (fora(f)) {
@@ -721,6 +726,9 @@ a.btn.pri{color:#fff}
     </div></div>`);
   };
 
+  ACT.ofiEstAb = d => { S.ofEstAb = S.ofEstAb === d.id ? null : d.id; render(); };
+  ACT.ofiEstEsc = d => { S.ofEstAb = null; render(); return ACT.ofiEst(d); };
+  document.addEventListener('click', e => { if (S.ofEstAb && !e.target.closest?.('.of-estm,.of-estb')) { S.ofEstAb = null; render(); } });
   ACT.ofiEst = async d => {
     const f = fx(d.id); if (!f || f.estado === d.c) return; const p = { estado: d.c };
     if (d.c === 'pronto' && !f.prontoEm) p.prontoEm = new Date().toISOString();

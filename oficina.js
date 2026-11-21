@@ -23,15 +23,15 @@ window.OFI_INIT = function () {
   const EST_INT = { recebido: 'Por rever', reparacao: 'Em revisão', aguarda_peca: 'À espera de peça', pronto: 'Pronta para troca', cancelado: 'Cancelada' };
   const estDe = t => t === 'transporte' ? EST_TR : t === 'interna' ? EST_INT : ['local', 'manutencao', 'reparacao'].includes(t) ? EST_FORA : EST;
   const estL = f => { if (f.tipo === 'guarda' && f.estado === 'recebido') return 'Guardado'; if (f.tipo === 'interna' && f.estado === 'entregue') return 'Aplicada'; const M = estDe(f.tipo); if (M !== EST && f.estado === 'entregue') return M.pronto; return M[f.estado] || EST[f.estado] || f.estado; };
-  /* ---------- módulos por plano ---------- */
+  /* ---------- funcionalidades (ligar / desligar) ---------- */
   const MODS = [
-    ['fora', 'Assistências fora', 'Trabalhos no cliente, «Estou aqui», km, locais e rota do dia'],
+    ['fora', 'Assistências no cliente', 'Trabalhos no cliente, «Estou aqui», km, locais e caminho no mapa'],
     ['ativos', 'Ativos e guarda de máquinas', 'O que cada cliente tem na empresa e máquinas só guardadas'],
     ['stock', 'Stock de peças', 'Baixa automática pelas fichas, stock mínimo e lista de encomenda'],
     ['garantias', 'Máquinas e garantias', 'Histórico por n.º de série, garantia e aviso de retrabalho'],
     ['armazenamento', 'Taxa de armazenamento', 'Cobrança do espaço ocupado pelo que fica na empresa'],
     ['link', 'Link do cliente', 'O cliente acompanha a reparação e aceita o orçamento'],
-    ['planeamento', 'Planear trabalho', 'Lotes, tempos médios, kits e peças a preparar'],
+    ['planeamento', 'Tempos e kits', 'Tempos médios por peça, kits e peças a preparar'],
     ['rendimento', 'Rendimento dos técnicos', 'Faturação por técnico e tempos'],
     ['vendas', 'Vendas de consumíveis', 'Catálogo, vendas aos clientes e recebimentos'],
     ['croquis', 'Croquis das peças', 'Desenhos do catálogo com os números clicáveis'],
@@ -169,11 +169,11 @@ window.OFI_INIT = function () {
   for (let i = NAV.length - 1; i >= 0; i--) if (tirar.includes(NAV[i][0])) NAV.splice(i, 1);
   for (let i = NAV.length - 1; i >= 0; i--) if (['maquinas', 'mapa'].includes(NAV[i][0])) NAV.splice(i, 1);
   NAV.splice(1, 0, ['meudia', 'O meu dia', 'clock'], ['oficina', 'Oficina e assistências', 'tool'], ['ativos', 'Ativos dos clientes', 'box'], ['trocas', 'Peças de troca (revisões)', 'swap'], ['fulfil', 'Fulfillment', 'pallet'], ['equip', 'Histórico máquinas', 'serial']);
-  const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['encomendarp', 'Peças a encomendar', 'box'], ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro'], ['modulos', 'Plano e módulos', 'grid'], ['marca', 'Empresa e marca', 'edit'], ['empresas', 'Empresas (superadmin)', 'users']);
+  const iMais = NAV.findIndex(n => n[0] === 'mais'); NAV.splice(iMais, 0, ['encomendarp', 'Peças a encomendar', 'box'], ['tecnicosof', 'Técnicos e rendimento', 'chart'], ['tempos', 'Tempos e kits', 'clock'], ['ofcfg', 'Preços e deslocações', 'euro'], ['modulos', 'Funcionalidades', 'grid'], ['marca', 'Empresa e marca', 'edit']);
   for (let i = NAV.length - 1; i > 0; i--) if (NAV[i][0] === 'sep' && (NAV[i - 1][0] === 'sep' || i === NAV.length - 1)) NAV.splice(i, 1);
   SO_VALORES.push('ofcfg', 'tecnicosof');
   TABS.splice(0, TABS.length, ['inicio', 'Início', 'home'], ['meudia', 'O meu dia', 'clock'], ['oficina', 'Oficina', 'tool'], ['clientes', 'Clientes', 'users'], ['mais', 'Mais', 'menu']);
-  Object.assign(TITLES, { trocas: 'Peças de troca', marca: 'Empresa e marca', empresas: 'Empresas', modulos: 'Plano e módulos', fulfil: 'Fulfillment', equip: 'Histórico máquinas', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
+  Object.assign(TITLES, { trocas: 'Peças de troca', marca: 'Empresa e marca', empresas: 'Empresas', modulos: 'Funcionalidades', fulfil: 'Fulfillment', equip: 'Histórico máquinas', equipum: 'Máquina', encomendarp: 'Peças a encomendar', meudia: 'O meu dia', planear: 'Planear trabalho', tecnicosof: 'Técnicos e rendimento', tempos: 'Tempos e kits', ativos: 'Ativos dos clientes', inicio: 'Início', oficina: 'Oficina e assistências', ofcfg: 'Preços e deslocações', rotaof: 'Rota do dia' });
   Object.defineProperty(TITLES, 'ofi', { get() { const f = S.data.fichas.get(S.params?.id); return f ? 'Ficha ' + cod(f) : 'Ficha'; } });
   const nc0 = navCounts; navCounts = () => ({ ...nc0(), oficina: D('fichas').filter(f => f.tipo !== 'guarda' && ABERTOS.includes(f.estado)).length });
 
@@ -562,7 +562,7 @@ a.btn.pri{color:#fff}
         <div class="fld"><label for="cf-garn">Garantia de máquinas novas (dias)</label><input id="cf-garn" type="number" step="1" value="${c.garantiaMaqNovaDias ?? 365}"></div>
         <div class="fld"><label for="cf-garu">Garantia de máquinas usadas (dias)</label><input id="cf-garu" type="number" step="1" value="${c.garantiaMaqUsadaDias ?? 180}"></div>
         <div class="fld" style="grid-column:1/-1"><label for="cf-trv">Tempos fixos das peças revistas (minutos) · uma por linha, ex.: Caldeira = 30</label><textarea id="cf-trv" rows="4">${esc(Object.entries(c.temposRevisao || {}).map(([k, v]) => k + ' = ' + v).join('\n'))}</textarea></div>
-        <div class="fld" style="grid-column:1/-1"><b>Taxa de armazenamento</b><span class="note" style="display:block">Para o que fica na empresa depois de pronto (ou desde a entrada, nas máquinas só guardadas). Cada empresa define as suas regras.</span></div>
+        <div class="fld" style="grid-column:1/-1"><b>Taxa de armazenamento</b><span class="note" style="display:block">Para o que fica na empresa depois de pronto (ou desde a entrada, nas máquinas só guardadas).</span></div>
         <div class="fld"><label for="cf-am">Cobrar</label><select id="cf-am">${[['nao', 'Não cobrar'], ['dia', 'Por dia'], ['mes', 'Por mês (30 dias)']].map(([k, l]) => `<option value="${k}" ${(c.armModo || 'nao') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         <div class="fld"><label for="cf-ai">A partir de</label><input id="cf-ai" type="date" value="${esc(c.armInicio || '')}"></div>
         <div class="fld"><label for="cf-ag">Dias grátis</label><input id="cf-ag" type="number" step="1" value="${c.armGratis ?? 8}"></div>
@@ -1643,19 +1643,18 @@ a.btn.pri{color:#fff}
 
   /* ---------- ecrã «Plano e módulos» (administrador) ---------- */
   VIEWS.modulos = () => loadingOr(() => {
-    if (!S.isAdmin) return '<div class="panel empty"><b>Só o administrador vê o plano</b></div>';
+    if (!S.isAdmin) return '<div class="panel empty"><b>Só o administrador muda as funcionalidades</b></div>';
     const c = cfg(), pl = c.plano || 'empresa';
     const linha = ([k, n, d, t]) => { const on = temMod(k); return `<label class="row" style="cursor:pointer;align-items:center"><span class="rt"><span class="r1">${esc(n)}${t ? ' ' + badge('Integração', 'info') : ''}${k === 'link' || k === 'avisos' ? ' ' + badge('Em preparação', 'mute') : ''}</span><span class="r2">${esc(d)}</span></span><input type="checkbox" data-ofmod="${k}" ${on ? 'checked' : ''} style="width:24px;height:24px"></label>`; };
-    return `<div class="pg"><div class="panel"><div class="ph"><h2>Plano</h2></div><div class="pb"><div class="of-est">${Object.entries(PLANOS).map(([k, [n, L]]) => `<button class="chipb ${pl === k ? 'on' : ''}" data-act="ofiPlano" data-c="${k}">${n} · ${L.length} módulos</button>`).join('')}${pl === 'medida' ? `<button class="chipb on">À medida</button>` : ''}</div>
-      <p class="note" style="margin:10px 0 0">Ao escolher um plano, os módulos ficam como em baixo. Pode depois ligar ou desligar um a um (fica «À medida»). As fichas, fotos, cronómetro, assinatura, PDF, clientes e manuais estão sempre incluídos. Desligar um módulo não apaga dados: ficam guardados para quando voltar a ligar.</p></div></div>
-      <div class="panel"><div class="ph"><h2>Módulos</h2></div>${MODS.filter(m => !m[3]).map(linha).join('')}</div>
-      <div class="panel"><div class="ph"><h2>Integrações</h2></div>${MODS.filter(m => m[3]).map(linha).join('')}<div class="pb"><p class="note" style="margin:0">As integrações ligam-se por empresa quando houver os dados de cada uma (conta do Sage, email e número de WhatsApp da empresa).</p></div></div></div>`;
+    return `<div class="pg"><div class="panel"><div class="pb"><p class="note" style="margin:0">Ligue ou desligue partes da app. Desligar não apaga nada: os dados ficam guardados para quando voltar a ligar. As fichas, fotos, cronómetro, assinatura, PDF, clientes e manuais estão sempre ligados.</p></div></div>
+      <div class="panel"><div class="ph"><h2>Funcionalidades</h2></div>${MODS.filter(m => !m[3]).map(linha).join('')}</div>
+      <div class="panel"><div class="ph"><h2>Integrações</h2></div>${MODS.filter(m => m[3]).map(linha).join('')}<div class="pb"><p class="note" style="margin:0">As integrações ligam-se quando houver os dados (conta do Sage, email e número de WhatsApp da Mundicacau).</p></div></div></div>`;
   });
-  const gravaMods = async (modulos, plano) => { if (await patch('oficina_config', cfg().id, { modulos, plano })) toast('Plano atualizado'); };
+  const gravaMods = async (modulos, plano) => { if (await patch('oficina_config', cfg().id, { modulos, plano })) toast('Guardado'); };
   ACT.ofiPlano = d => { const L = PLANOS[d.c][1]; gravaMods(Object.fromEntries(MODS.map(([k]) => [k, L.includes(k)])), d.c); };
   document.addEventListener('change', e => { const k = e.target?.dataset?.ofmod; if (!k || !S.isAdmin) return; const m = { ...Object.fromEntries(MODS.map(([x]) => [x, temMod(x)])), [k]: e.target.checked }; const pl = Object.entries(PLANOS).find(([, [, L]]) => MODS.every(([x]) => m[x] === L.includes(x))); gravaMods(m, pl ? pl[0] : 'medida'); });
   // ecrãs de módulos desligados
-  Object.keys(VMOD).forEach(v => { const f0 = VIEWS[v]; if (!f0) return; VIEWS[v] = (...a) => temMod(VMOD[v]) ? f0(...a) : `<div class="pg"><div class="panel empty"><b>Módulo não incluído no plano</b>${S.isAdmin ? '<button class="btn" data-act="go" data-v="modulos">Ver plano e módulos</button>' : 'Fale com o administrador.'}</div></div>`; });
+  Object.keys(VMOD).forEach(v => { const f0 = VIEWS[v]; if (!f0) return; VIEWS[v] = (...a) => temMod(VMOD[v]) ? f0(...a) : `<div class="pg"><div class="panel empty"><b>Esta funcionalidade está desligada</b>${S.isAdmin ? '<button class="btn" data-act="go" data-v="modulos">Ver funcionalidades</button>' : 'Fale com o administrador.'}</div></div>`; });
 
   /* ---------- marca da empresa (administrador) ---------- */
   VIEWS.marca = () => loadingOr(() => {
@@ -1663,7 +1662,7 @@ a.btn.pri{color:#fff}
     const f = (k, l, t = 'text', ex = '') => `<div class="fld"><label for="em-${k}">${l}</label><input id="em-${k}" type="${t}" value="${esc(e[k] ?? '')}" ${ex}></div>`;
     return `<div class="pg"><div class="panel"><div class="ph"><h2>Empresa</h2></div><div class="pb"><div class="frm">
       ${f('nome', 'Nome')}${f('nif', 'NIF', 'text', 'inputmode="numeric"')}${f('email', 'Email (vai nas mensagens e no link do cliente)', 'email')}${f('telefone', 'Telefone', 'tel')}${f('morada', 'Morada')}
-      <div class="fld"><label>Prefixo das fichas</label><input value="${esc(e.prefixo || '')}" disabled><span class="note">Ex.: ${esc(e.prefixo || 'MC')}-2026-0001. Só o superadministrador muda.</span></div></div></div></div>
+      <div class="fld"><label>Prefixo das fichas</label><input value="${esc(e.prefixo || '')}" disabled><span class="note">Ex.: ${esc(e.prefixo || 'MC')}-2026-0001. Fixo.</span></div></div></div></div>
       <div class="panel"><div class="ph"><h2>Marca</h2></div><div class="pb"><div class="frm">
       <div class="fld"><label for="em-cor">Cor principal</label><input id="em-cor" type="color" value="${esc(e.cor || '#0090E0')}"></div>
       <div class="fld"><label for="em-cor2">Cor secundária</label><input id="em-cor2" type="color" value="${esc(e.cor2 || '#2F4F94')}"></div>

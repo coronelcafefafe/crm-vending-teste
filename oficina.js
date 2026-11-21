@@ -33,12 +33,13 @@ window.OFI_INIT = function () {
     ['link', 'Link do cliente', 'O cliente acompanha a reparação e aceita o orçamento'],
     ['planeamento', 'Planear trabalho', 'Lotes, tempos médios, kits e peças a preparar'],
     ['rendimento', 'Rendimento dos técnicos', 'Faturação por técnico e tempos'],
+    ['vendas', 'Vendas de consumíveis', 'Catálogo, vendas aos clientes e recebimentos'],
     ['croquis', 'Croquis das peças', 'Desenhos do catálogo com os números clicáveis'],
     ['sage', 'Integração Sage', 'Ficheiro para faturar no Sage', 'integra'],
     ['avisos', 'Avisos automáticos', 'Email e WhatsApp enviados pelo servidor', 'integra']];
   const PLANOS = { base: ['Base', []], profissional: ['Profissional', ['fora', 'ativos', 'armazenamento', 'stock', 'garantias', 'link']], empresa: ['Empresa', MODS.map(m => m[0])] };
   const temMod = k => (cfg().modulos || {})[k] !== false;
-  const VMOD = { fulfil: 'armazenamento', rotaof: 'fora', ativos: 'ativos', encomendarp: 'stock', stock: 'stock', equip: 'garantias', equipum: 'garantias', planear: 'planeamento', tempos: 'planeamento', tecnicosof: 'rendimento' };
+  const VMOD = { catalogo: 'vendas', encomendas: 'vendas', pagamentos: 'vendas', fulfil: 'armazenamento', rotaof: 'fora', ativos: 'ativos', encomendarp: 'stock', stock: 'stock', equip: 'garantias', equipum: 'garantias', planear: 'planeamento', tempos: 'planeamento', tecnicosof: 'rendimento' };
   SO_VALORES.push('modulos', 'marca');
   window.MODV = v => v === 'empresas' ? !!S.super : (!VMOD[v] || temMod(VMOD[v]));
   /* ---------- empresa (várias empresas na mesma base) e marca ---------- */
@@ -603,7 +604,7 @@ a.btn.pri{color:#fff}
     const enc = D('encomendas').filter(x => x.entidade === e.id);
     const tel = e.telemovel || e.telefone, addr = [e.morada, e.cp, e.localidade].filter(Boolean).join(', ');
     const t = S.data.desl_tabelas.get(e.deslTabela);
-    const tabs = [['resumo', 'Resumo'], ['tarefas', 'Tarefas', espera.length + tarefas.length], ['locais', 'Locais', LS.length], ['encomendas', 'Vendas', enc.length]];
+    const tabs = [['resumo', 'Resumo'], ['tarefas', 'Tarefas', espera.length + tarefas.length], ['locais', 'Locais', LS.length], ...(temMod('vendas') ? [['encomendas', 'Vendas', enc.length]] : [])];
     const pre = o => esc(JSON.stringify(Object.assign({ entidade: e.id }, o)));
     let h = `<div class="pg">${roBanner()}<div class="fh"><span class="av">${esc(initials(e.nome))}</span><div style="min-width:0;flex:1"><h1>${esc(e.nome)}</h1><div class="meta">${(e.tipos || []).map(k => badge(TIPOS[k] || k, 'gold')).join('')}${e.localidade ? badge(e.localidade) : ''}${ativos.length ? badge(ativos.length + ' na empresa', 'info') : ''}</div></div>${S.canWrite ? `<button class="btn sm" data-act="edit" data-col="entidades" data-id="${e.id}">${ic('edit', 16)}<span>Editar</span></button>` : ''}</div>
     <div class="acts"><a class="act ${tel ? '' : 'off'}" href="tel:${esc(telClean(tel))}">${ic('phone')}<span>Ligar</span></a><a class="act ${e.telemovel ? '' : 'off'}" href="https://wa.me/${esc(waNum(e.telemovel))}" target="_blank" rel="noopener">${ic('wa')}<span>WhatsApp</span></a><a class="act ${e.email ? '' : 'off'}" href="mailto:${esc(e.email || '')}">${ic('mail')}<span>Email</span></a><a class="act ${addr ? '' : 'off'}" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}" target="_blank" rel="noopener">${ic('pin')}<span>Mapa</span></a></div>
@@ -715,7 +716,7 @@ a.btn.pri{color:#fff}
       ${temMod('fora') ? `<button data-act="ofiNew" data-preset='${pre({ tipo: 'local' })}'>${ic('pin', 20)}<span>Assistência no cliente</span></button>` : ''}
       ${eid ? '' : `<button data-act="ofiNew" data-preset='{"tipo":"interna","equipamento":"Caldeira"}'>${ic('swap', 20)}<span>Ficha interna (material da casa)</span></button>`}
       ${eid ? '' : `<button data-act="new" data-col="entidades">${ic('users', 20)}<span>Cliente</span></button>`}
-      <button data-act="new" data-col="encomendas" ${eid ? `data-preset='${pre({})}'` : ''}>${ic('box', 20)}<span>Venda de consumíveis</span></button>
+      ${temMod('vendas') ? `<button data-act="new" data-col="encomendas" ${eid ? `data-preset='${pre({})}'` : ''}>${ic('box', 20)}<span>Venda de consumíveis</span></button>` : ''}
       <button data-act="new" data-col="tarefas" ${eid ? `data-preset='${pre({})}'` : ''}>${ic('cal', 20)}<span>Tarefa</span></button>
     </div></div>`);
   };

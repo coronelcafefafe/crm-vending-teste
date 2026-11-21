@@ -809,10 +809,14 @@ a.btn.pri{color:#fff}
   document.addEventListener('click', e => { if (S.ofEstAb && !e.target.closest?.('.of-estm,.of-estb')) { S.ofEstAb = null; render(); } });
   ACT.ofiEst = async d => {
     const f = fx(d.id); if (!f || f.estado === d.c) return; const p = { estado: d.c };
+    // fechar o trabalho pede confirmação: fica pronto para faturar (não envia nada ao cliente)
+    if (d.c === 'pronto' && !d.ok && f.tipo !== 'interna') { const fo = fora(f), tr = f.tipo === 'transporte';
+      openSheet(`<div class="sh"><h2>${tr ? 'Transporte concluído' : fo ? 'Assistência finalizada' : 'Reparação finalizada'}</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb"><p style="margin:0">${esc(cod(f))} · ${esc(prop(f))}</p><p style="margin:8px 0 0"><b>Fica pronta para faturar.</b> Confirma?</p><p class="note" style="margin:8px 0 0">Se não estiver terminada, carregue em «Não» e escolha outro estado.</p></div><div class="sf"><span class="grow"></span><button class="btn" data-act="close">Não</button><button class="btn pri" data-act="ofiEst" data-id="${f.id}" data-c="pronto" data-ok="1">Sim</button></div>`); return; }
+    if (d.ok) closeSheet();
     if (d.c === 'pronto' && !f.prontoEm) p.prontoEm = new Date().toISOString();
     if (d.c === 'entregue') p.entregueEm = new Date().toISOString();
     if (['pronto', 'entregue'].includes(d.c) && aberto(f)) await paraCrono(f);
-    if (await patch('fichas', f.id, p)) { toast(estDe(f.tipo)[d.c] || EST[d.c]); if (f.tipo === 'interna' || f.tipo === 'transporte') return; if (d.c === 'pronto' && !f.avisadoEm) setTimeout(() => ACT.ofiAviso({ id: f.id }), 200); if (d.c === 'entregue') setTimeout(() => ACT.ofiDocMenu({ id: f.id, c: 'entrega' }), 200); }
+    if (await patch('fichas', f.id, p)) { toast(d.c === 'pronto' && f.tipo !== 'interna' ? 'Pronta para faturar' : estDe(f.tipo)[d.c] || EST[d.c]); }
   };
 
   async function paraCrono(f) {

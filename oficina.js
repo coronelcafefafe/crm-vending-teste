@@ -464,10 +464,8 @@ a.btn.pri{color:#fff}
     // deslocação
     if (fora(f)) {
       const dc = f.km != null ? deslCalc(e, f.km) : null;
-      h += `<div class="panel"><div class="ph"><h2>Deslocação</h2><span class="note">${e.deslModo === 'escaloes' ? 'Cliente por escalões' : 'Cliente por km'}</span></div><div class="pb">
-        ${f.chegadaEm ? `<p style="margin:0 0 8px">Chegou a ${fD(f.chegadaEm)} · <b>${fmtKm(f.km)} km</b> desde a ${esc(cfg().empresa)}${f.chegadaLat ? ` · <a href="https://www.google.com/maps/search/?api=1&query=${f.chegadaLat},${f.chegadaLng}" target="_blank" rel="noopener">ver no mapa</a>` : ''}</p>` : '<p class="note" style="margin:0 0 10px">Quando chegar ao local, carregue em «Estou aqui». O telemóvel envia a localização, calcula os km desde a empresa e começa a contar o tempo de trabalho.</p>'}
-        ${dc && S.verValores ? `<p class="note" style="margin:0 0 10px">${esc(dc.txt)} = <b>${eur(dc.valor)}</b></p>` : ''}
-        ${ro ? '' : `<div class="of-row2"><button class="btn pri of-big" data-act="ofiAqui" data-id="${f.id}">${ic('pin', 18)}${f.chegadaEm ? 'Atualizar localização' : 'Estou aqui'}</button><div class="fld" style="width:130px;margin:0"><label for="ofkm">Km (corrigir)</label><input id="ofkm" type="number" step="0.1" inputmode="decimal" data-ofkm="${f.id}" value="${f.km ?? ''}"></div></div>`}
+      h += `<div class="panel"><div class="ph"><h2>Deslocação</h2></div><div class="pb">
+        ${ro ? (f.km != null ? `<p style="margin:0"><b>${fmtKm(f.km)} km</b></p>` : '') : `<div class="of-row2"><button class="btn pri of-big" data-act="ofiAqui" data-id="${f.id}">${ic('pin', 18)}${f.chegadaEm ? 'Atualizar localização' : 'Estou aqui'}</button><div class="fld" style="width:130px;margin:0"><label for="ofkm">Km manuais</label><input id="ofkm" type="number" step="0.1" inputmode="decimal" data-ofkm="${f.id}" value="${f.km ?? ''}"></div></div>`}
       </div></div>`;
     }
 

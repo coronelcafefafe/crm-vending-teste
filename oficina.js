@@ -1264,6 +1264,8 @@ a.btn.pri{color:#fff}
 
   /* =================== FICHAS INTERNAS, PEÇAS DE TROCA, TRANSPORTE, VOLTAR CÁ, REABRIR =================== */
   const interna = f => f.tipo === 'interna';
+  const velhasDe = x => { const a = x.aplicadaEm && fx(x.aplicadaEm); if (!a) return []; const t = (a.trocas || []).find(t => t.interna === x.id); if (t?.velha && fx(t.velha)) return [fx(t.velha)];
+    const L = D('fichas').filter(v => interna(v) && v.origemFicha === a.id && v.id !== x.id), T = (a.trocas || []); if (L.length && L.length === T.length) { const i = T.findIndex(t => t.interna === x.id); const o = L.sort((p, q) => (p.entrada || '').localeCompare(q.entrada || '')); return o[i] ? [o[i]] : []; } return L; };
   const prontasTroca = () => D('fichas').filter(f => interna(f) && f.estado === 'pronto' && !f.aplicadaEm);
   const tempoFixo = eq => { const T = cfg().temposRevisao || {}; const k = Object.keys(T).find(x => norm(x) === norm(eq || '')); return k ? +T[k] : null; };
   async function entInterna() {
@@ -1300,6 +1302,7 @@ a.btn.pri{color:#fff}
     S.ofSemAbrir = false;
     if (S.view === 'ofi' && S.params.id === x.id) go('ofi', { id: f.id });
     const nv = nid && fx(nid);
+    if (nid) { const f2 = fx(f.id); if (f2) await patch('fichas', f2.id, { trocas: (f2.trocas || []).map(t => t.interna === x.id && !t.velha ? { ...t, velha: nid } : t) }); }
     if (!nv) { toast('Peça revista aplicada.'); return; }
     const temCod = !!(nv.codigo || nv.numero);
     openSheet(`<div class="sh"><h2>Peça aplicada</h2><button class="ib" data-act="close" aria-label="Fechar">${ic('x')}</button></div><div class="sb" style="text-align:center">
@@ -1398,7 +1401,7 @@ a.btn.pri{color:#fff}
     else if (f.reabertaEm) ex += `<p class="note" style="margin:0">Reaberta a ${fD(f.reabertaEm)} por ${esc(f.reabertaPor || '')}.</p>`;
     // ficha interna
     if (interna(f)) { const o = f.origemFicha && fx(f.origemFicha), a = f.aplicadaEm && fx(f.aplicadaEm), tf = tempoFixo(f.equipamento);
-      ex += `<div class="panel" style="border-color:var(--gold)"><div class="ph"><h2>Revisão interna · peça de troca</h2></div><div class="pb"><p style="margin:0 0 6px">${a ? `Aplicada no cliente <b>${esc(prop(a))}</b> · <a href="#" data-act="ofiOpen" data-id="${a.id}">${esc(cod(a))}</a>` : f.estado === 'pronto' ? '<b>Pronta a usar numa troca.</b>' : 'Em revisão: quando acabar, marque «Pronta para troca» e fica disponível para usar nos clientes.'}</p>
+      ex += `<div class="panel" style="border-color:var(--gold)"><div class="ph"><h2>Revisão interna · peça de troca</h2></div><div class="pb"><p style="margin:0 0 6px">${a ? `Utilizada em <a href="#" data-act="ofiOpen" data-id="${a.id}"><b>${esc(cod(a))}</b></a> · ${esc(prop(a))}${velhasDe(f).map(v => `<br><span style="color:var(--bad)">Deu origem a <a href="#" data-act="ofiOpen" data-id="${v.id}" style="color:var(--bad)"><b>${esc(cod(v))}</b></a></span>`).join('')}` : f.estado === 'pronto' ? '<b>Pronta a usar numa troca.</b>' : 'Em revisão: quando acabar, marque «Pronta para troca» e fica disponível para usar nos clientes.'}</p>
         <p class="note" style="margin:0">${o ? `Peça velha retirada da ficha <a href="#" data-act="ofiOpen" data-id="${o.id}">${esc(cod(o))}</a> (${esc(prop(o))}). ` : ''}${a || ro || f.estado === 'cancelado' ? '' : `<button class="btn sm pri" data-act="ofiIntJunta" data-id="${f.id}" style="margin:0 0 8px">${ic('swap', 16)}Juntar a uma assistência / ficha de cliente</button><br>`}Tempo a cobrar na troca: <b>${tf != null ? fmtMin(tf) + ' (tempo fixo para ' + esc(f.equipamento) + ')' : fmtMin(Math.round(minReal(f))) + ' (tempo registado; sem tempo fixo para ' + esc(f.equipamento || 'este tipo') + ')'}</b>. As peças aplicadas aqui vão para a ficha do cliente.</p></div></div>`; }
     // peças revistas aplicadas (fichas de clientes)
     if (!interna(f) && f.tipo !== 'guarda') { const TR = f.trocas || [];
@@ -1425,7 +1428,7 @@ a.btn.pri{color:#fff}
   VIEWS.trocas = () => loadingOr(() => {
     const I = D('fichas').filter(interna), pr = I.filter(f => f.estado === 'pronto' && !f.aplicadaEm), rev = I.filter(f => ABERTOS.includes(f.estado)), ap = I.filter(f => f.aplicadaEm).sort((a, b) => (b.entregueEm || '').localeCompare(a.entregueEm || '')).slice(0, 30);
     const porTipo = {}; pr.forEach(f => { const k = nomeEq(f); porTipo[k] = (porTipo[k] || 0) + 1; });
-    const lin = f => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero ?? '•'}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}${f.nSerie ? ' · S/N ' + esc(f.nSerie) : ''}</span><span class="r2">${esc(cod(f))}${f.tecnico ? ' · ' + esc(tecNome(f.tecnico)) : ''}${f.aplicadaEm && fx(f.aplicadaEm) ? ' · aplicada em ' + esc(prop(fx(f.aplicadaEm))) : ''}</span></span><span class="rr">${badge(estL(f), EST_T[f.estado])}</span></div>`;
+    const lin = f => `<div class="row" role="button" tabindex="0" data-act="ofiOpen" data-id="${f.id}"><span class="of-n">${f.numero ?? '•'}</span><span class="rt"><span class="r1">${esc(nomeEq(f))}${f.nSerie ? ' · S/N ' + esc(f.nSerie) : ''}</span><span class="r2">${esc(cod(f))}${f.tecnico ? ' · ' + esc(tecNome(f.tecnico)) : ''}</span>${f.aplicadaEm && fx(f.aplicadaEm) ? (() => { const a = fx(f.aplicadaEm), V = velhasDe(f); return `<span class="r2">Utilizada em <a href="#" data-act="ofiOpen" data-id="${a.id}"><b>${esc(cod(a))}</b></a> · ${esc(prop(a))}</span>${V.length ? `<span class="r2" style="color:var(--bad)">Deu origem a ${V.map(v => `<a href="#" data-act="ofiOpen" data-id="${v.id}" style="color:var(--bad)"><b>${esc(cod(v))}</b></a>`).join(', ')}</span>` : ''}`; })() : ''}</span><span class="rr">${badge(estL(f), EST_T[f.estado])}</span></div>`;
     return `<div class="pg">${roBanner()}${S.canWrite ? `<div><button class="btn pri" data-act="ofiNew" data-preset='{"tipo":"interna","equipamento":"Caldeira"}'>${ic('plus', 16)}Nova revisão interna</button></div>` : ''}
       <div class="mini">${Object.entries(porTipo).map(([k, n]) => `<div><span>${esc(k)} prontas</span><b>${n}</b></div>`).join('') || '<div><span>Peças prontas</span><b>0</b></div>'}<div><span>Em revisão</span><b>${rev.length}</b></div></div>
       <div class="panel"><div class="ph"><h2>Prontas a usar</h2></div>${pr.map(lin).join('') || '<div class="pb"><p class="note" style="margin:0">Nenhuma.</p></div>'}</div>

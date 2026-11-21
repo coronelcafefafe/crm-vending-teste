@@ -252,11 +252,17 @@ window.OFI_INIT = function () {
     const es = document.getElementById('f-estado');
     const tg = () => { const fora = FORA_T.includes(sel.value), intr = sel.value === 'interna';
       if (es) { const M = estDe(sel.value), cur = es.value; es.innerHTML = Object.entries(M).filter(([k]) => k !== '_voltar').map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join(''); es.value = M[cur] ? cur : (cur === 'entregue' && M.pronto ? 'pronto' : 'recebido'); }
-      INTF.forEach(k => { const el = document.getElementById('f-' + k)?.closest('.fld'); if (el) el.style.display = intr ? 'none' : ''; });
+      INTF.filter(k => k !== 'precoHora').forEach(k => { const el = document.getElementById('f-' + k)?.closest('.fld'); if (el) el.style.display = intr ? 'none' : ''; });
       if (intr) entInterna().then(eid => { const h = document.getElementById('f-entidade'), q = document.getElementById('f-entidade-q'); if (eid && h) { h.value = eid; if (q) q.value = S.data.entidades.get(eid)?.nome || ''; } });
       LOCF.forEach(k => { const el = document.getElementById('f-' + k)?.closest('.fld'); if (el) el.style.display = fora ? '' : 'none'; });
       const r2 = rc?.closest('.fld'); if (r2) r2.style.display = fora ? 'none' : '';
+      // assistências no cliente: é sempre a máquina completa; só marca, modelo, n.º de série, local e avaria
+      ['equipamento', 'grupo', 'proprietario'].forEach(k => { const el = document.getElementById('f-' + k)?.closest('.fld'); if (el && !intr) el.style.display = fora ? 'none' : ''; });
+      const eq = document.getElementById('f-equipamento'); if (fora && eq && !eq.value) eq.value = 'Máquina completa';
+      const av = document.getElementById('f-avaria'); if (av) av.rows = fora ? 3 : 4;
+      const ml = document.querySelector('label[for="f-modelo"]'); if (ml) ml.textContent = fora ? 'Modelo da máquina (para os manuais)' : 'Modelo da máquina';
       if (pv) pv.textContent = fora ? 'Data marcada com o cliente' : 'Data acordada com o cliente (entrega)'; };
+    const ph = document.getElementById('f-precoHora')?.closest('.fld'); if (ph) ph.style.display = 'none';
     sel.addEventListener('change', tg); tg();
   }
   openForm = (col, id, preset) => { const r = of0(col, id, preset); if (col === 'fichas') { try { ajustaFormFicha(id); } catch (_) { }  const i = document.getElementById('f-equipamento'); if (i && !document.getElementById('of-eqL')) { i.setAttribute('list', 'of-eqL'); i.setAttribute('autocomplete', 'off'); i.insertAdjacentHTML('afterend', `<datalist id="of-eqL">${[...new Set([...EQUIP, ...D('fichas').map(f => f.equipamento).filter(Boolean)])].map(x => `<option value="${esc(x)}">`).join('')}</datalist>`); } } return r; };

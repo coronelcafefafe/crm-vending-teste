@@ -311,6 +311,10 @@ window.OFI_INIT = function () {
 .of-est{display:flex;flex-wrap:wrap;gap:6px}
 .of-seg{display:flex;flex-wrap:wrap;gap:6px}
 .of-estb{display:inline-flex;align-items:center;gap:6px}
+.of-sug{position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 28px rgba(0,0,0,.14);padding:4px;max-height:320px;overflow:auto}
+.of-sug button{display:flex;width:100%;align-items:center;justify-content:space-between;gap:10px;text-align:left;background:none;border:0;border-radius:8px;padding:8px 10px;font:inherit;font-size:14px;color:inherit;cursor:pointer}
+.of-sug button:hover{background:var(--line)}
+.of-sug small{display:block;color:var(--ink2,#6E6E73);font-size:12px}
 .of-fusep{border-top:2px solid var(--brand,#0090E0);margin:4px 14px 0;padding:4px 0 0}
 .of-fusep span{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--brand,#0090E0)}
 .of-estm{position:absolute;right:0;top:calc(100% + 6px);z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 28px rgba(0,0,0,.14);min-width:210px;padding:5px;display:flex;flex-direction:column}
@@ -524,7 +528,7 @@ a.btn.pri{color:#fff}
     const P0 = f.pecas || [];
     h += `<div class="panel"><div class="ph"><h2>Peças aplicadas</h2>${S.verValores && v.pc ? `<b class="num">${eur(v.pc)}</b>` : ''}</div><div class="pb">
       ${P0.length ? P0.map((p, i) => `<div class="of-pc"><span class="grow">${esc(p.nome)}<small>${esc(p.ref || '')}${S.verValores ? ' · ' + eur(p.preco) + '/un' : ''}</small></span>${ro ? `<b>${p.qt}</b>` : `<span class="of-qt"><button data-act="ofiPq" data-id="${f.id}" data-i="${i}" data-c="-1">−</button><b class="num">${String(p.qt).replace('.', ',')}</b><button data-act="ofiPq" data-id="${f.id}" data-i="${i}" data-c="1">+</button></span>`}</div>`).join('') : '<p class="note" style="margin:0">Ainda sem peças.</p>'}
-      ${ro ? '' : `<div class="of-row2" style="margin-top:12px;align-items:flex-end"><div class="fld" style="flex:1;min-width:160px;margin:0"><label for="ofcod">Código da peça</label><input id="ofcod" data-ofcod="${f.id}" placeholder="Ex.: 0V2277" autocomplete="off" autocapitalize="characters" enterkeyhint="done"></div><div class="fld" style="width:76px;margin:0"><label for="ofcodqt">Qt</label><input id="ofcodqt" type="number" min="1" step="1" value="1" inputmode="numeric"></div><button class="btn pri" data-act="ofiCod" data-id="${f.id}">Pôr</button></div>`}
+      ${ro ? '' : `<div class="of-row2" style="margin-top:12px;align-items:flex-end"><div class="fld" style="flex:1;min-width:160px;margin:0;position:relative"><label for="ofcod">Código ou nome da peça</label><input id="ofcod" data-ofcod="${f.id}" placeholder="Ex.: 0V2277 ou caldeira" autocomplete="off" enterkeyhint="done"><div class="of-sug" id="ofsug" hidden></div></div><div class="fld" style="width:76px;margin:0"><label for="ofcodqt">Qt</label><input id="ofcodqt" type="number" min="1" step="1" value="1" inputmode="numeric"></div><button class="btn pri" data-act="ofiCod" data-id="${f.id}">Pôr</button></div>`}
       ${!PROCURA_PECAS ? '' : (() => { const CQ = temMod('croquis') ? D('croquis').filter(c => f.modelo && norm(c.modelo) === norm(f.modelo)).sort((a, b) => (a.ordem ?? 999) - (b.ordem ?? 999) || a.grupo.localeCompare(b.grupo, 'pt')) : []; return CQ.length ? `<div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:8px">Croquis do ${esc(f.modelo)} · toque num número</div><div class="of-est">${CQ.map(c => `<button class="chipb ${S.ofCroqui === c.id ? 'on' : ''}" data-act="ofiCroqui" data-c="${c.id}">${esc(c.grupo)}</button>`).join('')}</div>${S.ofCroqui && CQ.some(c => c.id === S.ofCroqui) ? croquiH(f, S.data.croquis.get(S.ofCroqui)) : ''}</div>` : (f.modelo ? `<p class="note" style="margin:12px 0 0">Ainda não há croquis do ${esc(f.modelo)}.</p>` : '').replace(/^(.*)$/s, m => temMod('croquis') ? m : ''); })()}
       ${ro || !PROCURA_PECAS ? '' : !S.ofPick?.open ? `<div style="margin-top:12px"><button class="btn" data-act="ofiPick" data-id="${f.id}">${ic('search', 16)}Procurar peça${f.modelo ? ' do ' + esc(f.modelo) : ''}</button></div>` : `
         <div class="fg" style="margin-top:12px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
@@ -897,6 +901,14 @@ a.btn.pri{color:#fff}
     else if (f.modelo && a.modelos && !servePara(a, f.modelo) && !confirm(`${a.nome} (${a.ref}) não aparece no catálogo do ${f.modelo}. Pôr mesmo assim?`)) return;
     await poePeca(f, a, qt, ref); const i2 = $('#ofcod'); if (i2) { i2.value = ''; i2.focus(); } const q2 = $('#ofcodqt'); if (q2) q2.value = 1;
   };
+  // sugestões ao escrever: peças cujo nome ou código contém o texto (primeiro as do modelo da ficha)
+  document.addEventListener('input', e => { const t = e.target; if (!t?.dataset?.ofcod) return; const box = $('#ofsug'); if (!box) return; const q = norm(t.value.trim()); if (q.length < 2) { box.hidden = true; return; }
+    const f = fx(t.dataset.ofcod), L = D('artigos').filter(a => a.ativo !== false && (norm(a.nome || '').includes(q) || norm(a.ref || '').includes(q)));
+    L.sort((a, b) => (f?.modelo ? (servePara(b, f.modelo) ? 1 : 0) - (servePara(a, f.modelo) ? 1 : 0) : 0) || (norm(a.ref || '').startsWith(q) ? -1 : 0) - (norm(b.ref || '').startsWith(q) ? -1 : 0) || (a.nome || '').localeCompare(b.nome || '', 'pt'));
+    box.innerHTML = L.length ? L.slice(0, 8).map(a => `<button type="button" data-act="ofiSug" data-id="${t.dataset.ofcod}" data-c="${esc(a.ref || '')}"><span>${esc(a.nome)}<small>${esc(a.ref || '')}${a.modelos ? ' · ' + esc(String(a.modelos).slice(0, 40)) : ''}</small></span>${S.verValores && a.preco ? `<b>${eur(a.preco)}</b>` : ''}</button>`).join('') + (L.length > 8 ? `<div class="note" style="padding:6px 10px">Mais ${L.length - 8}… escreva mais letras</div>` : '') : '<div class="note" style="padding:8px 10px">Nenhuma peça com esse nome ou código</div>';
+    box.hidden = false; });
+  document.addEventListener('click', e => { const box = $('#ofsug'); if (box && !box.hidden && !e.target.closest?.('#ofsug,#ofcod')) box.hidden = true; });
+  ACT.ofiSug = d => { const i = $('#ofcod'); if (i) i.value = d.c; const box = $('#ofsug'); if (box) box.hidden = true; ACT.ofiCod({ id: d.id }); };
   document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target?.dataset?.ofcod) { e.preventDefault(); ACT.ofiCod({ id: e.target.dataset.ofcod }); } });
 
   // croqui: desenho do catálogo de peças com os números clicáveis
